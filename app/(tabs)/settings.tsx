@@ -17,24 +17,7 @@ import { auth } from '@/config/firebase';
 import { router } from 'expo-router';
 import DataExport from '@/components/DataExport';
 import NotificationSystem from '@/components/NotificationSystem';
-import {
-  User,
-  Bell,
-  Shield,
-  Download,
-  Moon,
-  Sun,
-  Globe,
-  CreditCard,
-  HelpCircle,
-  LogOut,
-  ChevronRight,
-  Settings as SettingsIcon,
-  Mail,
-  Lock,
-  Trash2,
-  Database,
-} from 'lucide-react-native';
+import { User, Bell, Shield, Download, Moon, Sun, Globe, CreditCard, CircleHelp as HelpCircle, LogOut, ChevronRight, Settings as SettingsIcon, Mail, Lock, Trash2, Database } from 'lucide-react-native';
 
 export default function SettingsScreen() {
   const { colors, isDark, toggleTheme } = useTheme();
