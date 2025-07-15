@@ -29,120 +29,7 @@ export default function ReceiptScanner({ visible, onClose, onReceiptScanned }: R
   const [isProcessing, setIsProcessing] = useState(false);
   const cameraRef = useRef<CameraView>(null);
 
-  if (Platform.OS === 'web') {
-    return (
-      <Modal visible={visible} animationType="slide" transparent={true}>
-        <View style={styles.webNotSupported}>
-          <View style={styles.webNotSupportedContent}>
-            <Camera size={48} color={colors.textSecondary} />
-            <Text style={styles.webNotSupportedText}>
-              Camera features are not available on web. Please use the manual entry option.
-            </Text>
-            <TouchableOpacity style={styles.webCloseButton} onPress={onClose}>
-              <Text style={styles.webCloseButtonText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    );
-  }
-
-  if (!permission) {
-    return <View />;
-  }
-
-  if (!permission.granted) {
-    return (
-      <Modal visible={visible} animationType="slide">
-        <View style={styles.permissionContainer}>
-          <Text style={styles.permissionText}>
-            We need your permission to use the camera for receipt scanning
-          </Text>
-          <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-            <Text style={styles.permissionButtonText}>Grant Permission</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-            <Text style={styles.cancelButtonText}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
-    );
-  }
-
-  const takePicture = async () => {
-    if (cameraRef.current) {
-      try {
-        const photo = await cameraRef.current.takePictureAsync({
-          quality: 0.8,
-          base64: false,
-        });
-        setCapturedImage(photo.uri);
-      } catch (error) {
-        console.error('Error taking picture:', error);
-        Alert.alert('Error', 'Failed to take picture');
-      }
-    }
-  };
-
-  const pickFromGallery = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Please grant photo library permissions');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setCapturedImage(result.assets[0].uri);
-    }
-  };
-
-  const processReceipt = async () => {
-    if (!capturedImage) return;
-
-    setIsProcessing(true);
-    try {
-      // TODO: Implement OCR processing here
-      // For now, we'll simulate processing and return the image
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Mock extracted data - in real implementation, this would come from OCR
-      const mockExtractedData = {
-        merchant: 'Sample Store',
-        amount: '25.99',
-        date: new Date().toISOString().split('T')[0],
-        category: 'Food & Dining',
-      };
-
-      onReceiptScanned(capturedImage, mockExtractedData);
-      setCapturedImage(null);
-      onClose();
-    } catch (error) {
-      console.error('Error processing receipt:', error);
-      Alert.alert('Error', 'Failed to process receipt');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const retakePhoto = () => {
-    setCapturedImage(null);
-  };
-
-  const toggleCameraFacing = () => {
-    setFacing(current => (current === 'back' ? 'front' : 'back'));
-  };
-
-  const toggleFlash = () => {
-    setFlash(!flash);
-  };
-
+  // Move styles inside component after useTheme() call
   const styles = StyleSheet.create({
     container: {
       flex: 1,
@@ -334,6 +221,120 @@ export default function ReceiptScanner({ visible, onClose, onReceiptScanned }: R
       fontFamily: 'Inter-SemiBold',
     },
   });
+
+  if (Platform.OS === 'web') {
+    return (
+      <Modal visible={visible} animationType="slide" transparent={true}>
+        <View style={styles.webNotSupported}>
+          <View style={styles.webNotSupportedContent}>
+            <Camera size={48} color={colors.textSecondary} />
+            <Text style={styles.webNotSupportedText}>
+              Camera features are not available on web. Please use the manual entry option.
+            </Text>
+            <TouchableOpacity style={styles.webCloseButton} onPress={onClose}>
+              <Text style={styles.webCloseButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
+
+  if (!permission) {
+    return <View />;
+  }
+
+  if (!permission.granted) {
+    return (
+      <Modal visible={visible} animationType="slide">
+        <View style={styles.permissionContainer}>
+          <Text style={styles.permissionText}>
+            We need your permission to use the camera for receipt scanning
+          </Text>
+          <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
+            <Text style={styles.permissionButtonText}>Grant Permission</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
+            <Text style={styles.cancelButtonText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+    );
+  }
+
+  const takePicture = async () => {
+    if (cameraRef.current) {
+      try {
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 0.8,
+          base64: false,
+        });
+        setCapturedImage(photo.uri);
+      } catch (error) {
+        console.error('Error taking picture:', error);
+        Alert.alert('Error', 'Failed to take picture');
+      }
+    }
+  };
+
+  const pickFromGallery = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please grant photo library permissions');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setCapturedImage(result.assets[0].uri);
+    }
+  };
+
+  const processReceipt = async () => {
+    if (!capturedImage) return;
+
+    setIsProcessing(true);
+    try {
+      // TODO: Implement OCR processing here
+      // For now, we'll simulate processing and return the image
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Mock extracted data - in real implementation, this would come from OCR
+      const mockExtractedData = {
+        merchant: 'Sample Store',
+        amount: '25.99',
+        date: new Date().toISOString().split('T')[0],
+        category: 'Food & Dining',
+      };
+
+      onReceiptScanned(capturedImage, mockExtractedData);
+      setCapturedImage(null);
+      onClose();
+    } catch (error) {
+      console.error('Error processing receipt:', error);
+      Alert.alert('Error', 'Failed to process receipt');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const retakePhoto = () => {
+    setCapturedImage(null);
+  };
+
+  const toggleCameraFacing = () => {
+    setFacing(current => (current === 'back' ? 'front' : 'back'));
+  };
+
+  const toggleFlash = () => {
+    setFlash(!flash);
+  };
 
   if (capturedImage) {
     return (
