@@ -12,15 +12,7 @@ import {
 import { useTheme } from '@/context/ThemeContext';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import {
-  Camera,
-  X,
-  FlipHorizontal,
-  Flash,
-  FlashOff,
-  Image as ImageIcon,
-  CheckCircle,
-} from 'lucide-react-native';
+import { Camera, X, FlipHorizontal, Slash as Flash, FlashlightOff as FlashOff, Image as ImageIcon, CircleCheck as CheckCircle } from 'lucide-react-native';
 
 interface ReceiptScannerProps {
   visible: boolean;
