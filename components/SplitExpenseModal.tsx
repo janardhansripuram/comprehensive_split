@@ -196,7 +196,6 @@ export default function SplitExpenseModal({
         creatorId: user.uid,
         participants: selectedParticipants.map((p) => ({
           userId: p.userId,
-          userName: friend.displayName || friend.email || 'Unknown',
           userName: p.userName || p.name,
           amount: p.amount,
           paid: p.userId === user.uid, // Creator has already paid
