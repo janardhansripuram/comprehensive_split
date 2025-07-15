@@ -553,9 +553,24 @@ export const settleViaWallet = async (splitId: string, fromUserId: string, toUse
 
 // Friend Management
 export const sendFriendRequest = async (fromUserId: string, toEmail: string): Promise<string> => {
+  console.log('Sending friend request from:', fromUserId, 'to:', toEmail);
   const senderProfile = await getUserProfile(fromUserId);
   if (!senderProfile) {
     throw new Error('Sender profile not found');
+  }
+
+  // Check if request already exists
+  const existingQuery = query(
+    collection(db, 'friendRequests'),
+    where('fromUserId', '==', fromUserId),
+    where('toEmail', '==', toEmail.toLowerCase()),
+    where('status', '==', 'pending')
+  );
+  
+  const existingSnapshot = await getDocs(existingQuery);
+  if (!existingSnapshot.empty) {
+    console.log('Friend request already exists');
+    return existingSnapshot.docs[0].id;
   }
 
   const friendRequestRef = collection(db, 'friendRequests');
@@ -563,7 +578,7 @@ export const sendFriendRequest = async (fromUserId: string, toEmail: string): Pr
     fromUserId,
     fromUserName: senderProfile.displayName || senderProfile.email || 'Unknown User',
     fromUserEmail: senderProfile.email,
-    toEmail,
+    toEmail: toEmail.toLowerCase(),
     status: 'pending',
     createdAt: serverTimestamp()
   });
@@ -572,13 +587,15 @@ export const sendFriendRequest = async (fromUserId: string, toEmail: string): Pr
 };
 
 export const getFriendRequests = async (userEmail: string): Promise<FriendRequest[]> => {
+  console.log('Fetching friend requests for email:', userEmail);
   const q = query(
     collection(db, 'friendRequests'),
-    where('toEmail', '==', userEmail),
+    where('toEmail', '==', userEmail.toLowerCase()),
     where('status', '==', 'pending')
   );
 
   const snapshot = await getDocs(q);
+  console.log('Friend requests snapshot size:', snapshot.size);
   return snapshot.docs.map(doc => ({ 
     id: doc.id, 
     ...doc.data(),
@@ -616,10 +633,14 @@ export const acceptFriendRequest = async (requestId: string, fromUserId: string,
 export const getFriends = async (userId: string): Promise<Friend[]> => {
   const q = query(
     collection(db, 'friends'),
-    where('userId', '==', userId)
+    where('userId', '==', userId),
+    where('status', '==', 'accepted')
   );
 
+  console.log('Fetching friends for userId:', userId);
   const snapshot = await getDocs(q);
+  console.log('Friends snapshot size:', snapshot.size);
+  
   return snapshot.docs.map(doc => ({ 
     id: doc.id, 
     ...doc.data(),
@@ -666,6 +687,7 @@ export const createGroup = async (group: Omit<Group, 'id' | 'createdAt' | 'updat
 };
 
 export const getGroups = async (userId: string): Promise<Group[]> => {
+  console.log('Fetching groups for userId:', userId);
   const q = query(
     collection(db, 'groups'),
     where('members', 'array-contains', userId),
@@ -673,6 +695,32 @@ export const getGroups = async (userId: string): Promise<Group[]> => {
   );
 
   const snapshot = await getDocs(q);
+  console.log('Groups snapshot size:', snapshot.size);
+  
+  if (snapshot.empty) {
+    // Try an alternative query without the orderBy
+    const altQuery = query(
+      collection(db, 'groups'),
+      where('members', 'array-contains', userId)
+    );
+    
+    const altSnapshot = await getDocs(altQuery);
+    console.log('Alternative groups snapshot size:', altSnapshot.size);
+    
+    if (!altSnapshot.empty) {
+      return altSnapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt || new Date(),
+        updatedAt: doc.data().updatedAt?.toDate?.() || doc.data().updatedAt || new Date(),
+        memberDetails: doc.data().memberDetails?.map((member: any) => ({
+          ...member,
+          joinedAt: member.joinedAt?.toDate?.() || member.joinedAt || new Date()
+        })) || []
+      } as Group));
+    }
+  }
+  
   return snapshot.docs.map(doc => ({ 
     id: doc.id, 
     ...doc.data(),

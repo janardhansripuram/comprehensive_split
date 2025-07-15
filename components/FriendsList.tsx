@@ -56,7 +56,9 @@ export default function FriendsList() {
   useEffect(() => {
     if (user) {
       loadFriends();
-      loadFriendRequests();
+      if (user.email) {
+        loadFriendRequests();
+      }
     }
   }, [user]);
 
@@ -65,6 +67,7 @@ export default function FriendsList() {
     
     setLoading(true);
     try {
+      console.log('Loading friends for user:', user.uid);
       const friendsData = await getFriends(user.uid);
       console.log('Friends data:', friendsData);
       
@@ -98,8 +101,10 @@ export default function FriendsList() {
   const loadFriendRequests = async () => {
     if (!user?.email) return;
     
+    console.log('Loading friend requests for email:', user.email);
     try {
       const requests = await getFriendRequests(user.email);
+      console.log('Friend requests:', requests);
       setFriendRequests(requests);
     } catch (error) {
       console.error('Error loading friend requests:', error);
@@ -109,14 +114,18 @@ export default function FriendsList() {
   const handleSendFriendRequest = async () => {
     if (!emailInput.trim() || !user) return;
 
-    if (emailInput.toLowerCase() === user.email?.toLowerCase()) {
+    const normalizedEmail = emailInput.trim().toLowerCase();
+    const userEmail = user.email?.toLowerCase() || '';
+    
+    if (normalizedEmail === userEmail) {
       Alert.alert('Error', 'You cannot add yourself as a friend');
       return;
     }
 
     setLoading(true);
     try {
-      await sendFriendRequest(user.uid, emailInput.trim().toLowerCase());
+      console.log('Sending friend request to:', normalizedEmail);
+      await sendFriendRequest(user.uid, normalizedEmail);
       Alert.alert('Success', 'Friend request sent!');
       setEmailInput('');
       setShowAddFriend(false);
@@ -131,6 +140,7 @@ export default function FriendsList() {
   const handleAcceptRequest = async (request: FriendRequest) => {
     if (!user) return;
 
+    console.log('Accepting friend request:', request.id);
     setLoading(true);
     try {
       await acceptFriendRequest(request.id, request.fromUserId, user.uid);
@@ -497,7 +507,7 @@ export default function FriendsList() {
                 style={styles.input}
                 value={emailInput}
                 onChangeText={setEmailInput}
-                placeholder="Enter friend's email"
+                placeholder="Enter friend's email (exact match required)"
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="email-address"
                 autoCapitalize="none"
