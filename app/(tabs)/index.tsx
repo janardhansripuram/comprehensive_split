@@ -22,24 +22,7 @@ import {
 import { Expense, Income, Budget, Split, Notification, Reminder } from '@/types';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { 
-  DollarSign, 
-  TrendingUp, 
-  TrendingDown, 
-  Target, 
-  Users, 
-  Plus, 
-  ArrowUpRight, 
-  ArrowDownLeft, 
-  Calendar, 
-  ChartPie as PieChart, 
-  Bell, 
-  CreditCard, 
-  Wallet, 
-  Activity,
-  Award,
-  BarChart3
-} from 'lucide-react-native';
+import { DollarSign, TrendingUp, TrendingDown, Target, Users, Plus, ArrowUpRight, ArrowDownLeft, Calendar, ChartPie as PieChart, Bell, CreditCard, Wallet, Activity, Award, ChartBar as BarChart3 } from 'lucide-react-native';
 import WalletManager from '@/components/WalletManager';
 import InvestmentTracker from '@/components/InvestmentTracker';
 import FinancialCalendar from '@/components/FinancialCalendar';

@@ -20,17 +20,7 @@ import {
 } from '@/services/firestore';
 import { Split, SettlementRequest, User } from '@/types';
 import { LinearGradient } from 'expo-linear-gradient';
-import {
-  DollarSign,
-  CreditCard,
-  Wallet,
-  CheckCircle,
-  Clock,
-  X,
-  Send,
-  ArrowUpRight,
-  ArrowDownLeft,
-} from 'lucide-react-native';
+import { DollarSign, CreditCard, Wallet, CircleCheck as CheckCircle, Clock, X, Send, ArrowUpRight, ArrowDownLeft } from 'lucide-react-native';
 
 interface SettlementManagerProps {
   visible: boolean;

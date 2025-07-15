@@ -11,17 +11,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { getFinancialCalendarEvents } from '@/services/firestore';
 import { LinearGradient } from 'expo-linear-gradient';
-import {
-  Calendar,
-  ChevronLeft,
-  ChevronRight,
-  X,
-  DollarSign,
-  Bell,
-  Clock,
-  AlertCircle,
-  CheckCircle,
-} from 'lucide-react-native';
+import { Calendar, ChevronLeft, ChevronRight, X, DollarSign, Bell, Clock, CircleAlert as AlertCircle, CircleCheck as CheckCircle } from 'lucide-react-native';
 
 interface CalendarEvent {
   id: string;

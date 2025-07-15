@@ -11,17 +11,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { getNotifications, markNotificationAsRead } from '@/services/firestore';
 import { Notification } from '@/types';
-import {
-  Bell,
-  X,
-  UserPlus,
-  Users,
-  CreditCard,
-  Clock,
-  Award,
-  Info,
-  CheckCircle,
-} from 'lucide-react-native';
+import { Bell, X, UserPlus, Users, CreditCard, Clock, Award, Info, CircleCheck as CheckCircle } from 'lucide-react-native';
 
 interface NotificationCenterProps {
   visible: boolean;
