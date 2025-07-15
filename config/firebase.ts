@@ -5,12 +5,12 @@ import { getStorage } from '@firebase/storage';
 
 // Firebase configuration - Using the same config as web version
 const firebaseConfig = {
-  apiKey: "AIzaSyDQpvnKXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-  authDomain: "splitchey.firebaseapp.com",
-  projectId: "splitchey",
-  storageBucket: "splitchey.appspot.com",
-  messagingSenderId: "XXXXXXXXXXXX",
-  appId: "1:XXXXXXXXXXXX:web:XXXXXXXXXXXXXXXX"
+  apiKey: "AIzaSyDbGPToe9ip8Ozi0bYDFEdTPeVw27stKis",
+  authDomain: "expenseflow-ykb45.firebaseapp.com",
+  projectId: "expenseflow-ykb45",
+  storageBucket: "expenseflow-ykb45.firebasestorage.app",
+  messagingSenderId: "471981177559",
+  appId: "1:471981177559:android:77b2a0595ad9135f96ce92"
 };
 
 // Initialize Firebase
