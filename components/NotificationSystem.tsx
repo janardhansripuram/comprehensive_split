@@ -17,17 +17,7 @@ import {
   markInsightAsRead 
 } from '@/services/firestore';
 import { BudgetAlert, SpendingInsight } from '@/types';
-import {
-  Bell,
-  X,
-  AlertTriangle,
-  TrendingUp,
-  Target,
-  CheckCircle,
-  Info,
-  Lightbulb,
-  Award,
-} from 'lucide-react-native';
+import { Bell, X, TriangleAlert as AlertTriangle, TrendingUp, Target, CircleCheck as CheckCircle, Info, Lightbulb, Award } from 'lucide-react-native';
 
 interface NotificationSystemProps {
   visible: boolean;
