@@ -12,6 +12,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from '@firebase/auth';
 import { auth } from '@/config/firebase';
+import { createUserProfile } from '@/services/firestore';
 import { useTheme } from '@/context/ThemeContext';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
 import { router } from 'expo-router';
@@ -41,7 +42,14 @@ export default function AuthScreen() {
       if (isLogin) {
         await signInWithEmailAndPassword(auth, email, password);
       } else {
-        await createUserWithEmailAndPassword(auth, email, password);
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        
+        // Create user profile in Firestore
+        await createUserProfile(userCredential.user.uid, {
+          email: userCredential.user.email || email,
+          displayName: userCredential.user.displayName || email.split('@')[0],
+          defaultCurrency: 'USD',
+        });
       }
       router.replace('/(tabs)');
     } catch (error: any) {

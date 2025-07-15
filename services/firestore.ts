@@ -37,6 +37,8 @@ import {
   SpendingInsight,
   ExportData
 } from '@/types';
+// Import createUserProfile function
+import { createUserProfile } from '@/services/firestore';
 
 // User Management
 export const createUserProfile = async (userId: string, userData: Partial<User>): Promise<void> => {
@@ -293,9 +295,17 @@ export const markInsightAsRead = async (insightId: string) => {
 
 // Friend Management
 export const sendFriendRequest = async (fromUserId: string, toEmail: string): Promise<string> => {
+  // Get sender's profile information
+  const senderProfile = await getUserProfile(fromUserId);
+  if (!senderProfile) {
+    throw new Error('Sender profile not found');
+  }
+
   const friendRequestRef = collection(db, 'friendRequests');
   const docRef = await addDoc(friendRequestRef, {
     fromUserId,
+    fromUserName: senderProfile.displayName || senderProfile.email || 'Unknown User',
+    fromUserEmail: senderProfile.email,
     toEmail,
     status: 'pending',
     createdAt: serverTimestamp()
@@ -311,7 +321,11 @@ export const getFriendRequests = async (userEmail: string): Promise<any[]> => {
   );
 
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  return snapshot.docs.map(doc => ({ 
+    id: doc.id, 
+    ...doc.data(),
+    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
+  }));
 };
 
 export const acceptFriendRequest = async (requestId: string, fromUserId: string, toUserId: string): Promise<void> => {

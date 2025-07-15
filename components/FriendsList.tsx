@@ -89,20 +89,7 @@ export default function FriendsList() {
     
     try {
       const requests = await getFriendRequests(user.email);
-      
-      // Get sender details
-      const requestsWithDetails = await Promise.all(
-        requests.map(async (request) => {
-          const senderProfile = await getUserProfile(request.fromUserId);
-          return {
-            ...request,
-            fromUserName: senderProfile?.displayName,
-            fromUserEmail: senderProfile?.email,
-          };
-        })
-      );
-      
-      setFriendRequests(requestsWithDetails);
+      setFriendRequests(requests);
     } catch (error) {
       console.error('Error loading friend requests:', error);
     }
