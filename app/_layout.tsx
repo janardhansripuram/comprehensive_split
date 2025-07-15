@@ -40,8 +40,9 @@ export default function RootLayout() {
     <ThemeProvider>
       <AuthProvider>
         <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="auth" />
+          <Stack.Screen name="auth/index" />
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="groups/[id]" />
           <Stack.Screen name="+not-found" />
         </Stack>
         <StatusBar style="auto" />

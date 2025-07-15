@@ -8,10 +8,8 @@ import {
   Modal,
   TextInput,
   Alert,
-  ProgressBarAndroid,
-  ProgressViewIOS,
-  Platform,
 } from 'react-native';
+import { ProgressView } from '@react-native-community/progress-view';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { 
@@ -29,8 +27,6 @@ interface GroupSavingsGoalsProps {
   groupId: string;
   groupName: string;
 }
-
-const ProgressBar = Platform.OS === 'ios' ? ProgressViewIOS : ProgressBarAndroid;
 
 export default function GroupSavingsGoals({ 
   visible, 
@@ -261,15 +257,10 @@ export default function GroupSavingsGoals({
       marginBottom: 20,
     },
     progressBar: {
-      height: 8,
-      backgroundColor: colors.border,
-      borderRadius: 4,
-      overflow: 'hidden',
       marginBottom: 8,
     },
-    progressFill: {
-      height: '100%',
-      borderRadius: 4,
+    progressView: {
+      height: 8,
     },
     progressText: {
       fontSize: 14,
@@ -480,14 +471,14 @@ export default function GroupSavingsGoals({
                       </View>
 
                       <View style={styles.progressSection}>
-                        <LinearGradient
-                          colors={[colors.primary, colors.secondary]}
-                          style={styles.progressBar}
-                          start={{ x: 0, y: 0 }}
-                          end={{ x: 1, y: 0 }}
-                        >
-                          <View style={[styles.progressFill, { width: `${progressPercentage}%` }]} />
-                        </LinearGradient>
+                        <View style={styles.progressBar}>
+                          <ProgressView
+                            progress={progressPercentage / 100}
+                            progressTintColor={colors.primary}
+                            trackTintColor={colors.border}
+                            style={styles.progressView}
+                          />
+                        </View>
                         <Text style={styles.progressText}>
                           {progressPercentage.toFixed(1)}% Complete
                         </Text>

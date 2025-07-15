@@ -40,7 +40,7 @@ import {
   Target,
 } from 'lucide-react-native';
 
-export default function GroupsScreen() {
+function GroupsScreen() {
   const { colors } = useTheme();
   const { user } = useAuth();
   
@@ -643,3 +643,5 @@ export default function GroupsScreen() {
     </View>
   );
 }
+
+export default GroupsScreen;
