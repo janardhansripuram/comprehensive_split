@@ -3,7 +3,7 @@ import { getAuth } from '@firebase/auth';
 import { getFirestore } from '@firebase/firestore';
 import { getStorage } from '@firebase/storage';
 
-// Firebase configuration - Replace with your actual Firebase config
+// Firebase configuration - Using the same config as web version
 const firebaseConfig = {
   apiKey: "AIzaSyC-y4YY70SOfqFu5fdEn6KQP1iil1Ggutg",
   authDomain: "oweme-469e0.firebaseapp.com",

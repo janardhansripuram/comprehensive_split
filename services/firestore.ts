@@ -37,8 +37,6 @@ import {
   SpendingInsight,
   ExportData
 } from '@/types';
-// Import createUserProfile function
-import { createUserProfile } from '@/services/firestore';
 
 // User Management
 export const createUserProfile = async (userId: string, userData: Partial<User>): Promise<void> => {
@@ -54,6 +52,14 @@ export const getUserProfile = async (userId: string): Promise<User | null> => {
   const userRef = doc(db, 'users', userId);
   const userSnap = await getDoc(userRef);
   return userSnap.exists() ? { id: userSnap.id, ...userSnap.data() } as User : null;
+};
+
+export const updateUserProfile = async (userId: string, updates: Partial<User>): Promise<void> => {
+  const userRef = doc(db, 'users', userId);
+  await updateDoc(userRef, {
+    ...updates,
+    updatedAt: serverTimestamp()
+  });
 };
 
 // Expense Management
@@ -360,14 +366,44 @@ export const getFriends = async (userId: string): Promise<any[]> => {
   );
 
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const friendsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  
+  // Get friend details for each friend
+  const friendsWithDetails = await Promise.all(
+    friendsData.map(async (friend) => {
+      const friendProfile = await getUserProfile(friend.friendId);
+      return {
+        ...friend,
+        displayName: friendProfile?.displayName,
+        email: friendProfile?.email,
+      };
+    })
+  );
+  
+  return friendsWithDetails;
 };
 
 // Group Management
 export const createGroup = async (group: Omit<Group, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
+  const creatorProfile = await getUserProfile(group.creatorId);
+  
   const groupRef = collection(db, 'groups');
   const docRef = await addDoc(groupRef, {
     ...group,
+    admins: [group.creatorId], // Creator is automatically an admin
+    memberDetails: [{
+      userId: group.creatorId,
+      displayName: creatorProfile?.displayName || 'Creator',
+      email: creatorProfile?.email || '',
+      role: 'creator',
+      joinedAt: serverTimestamp()
+    }],
+    settings: {
+      allowMembersToAddExpenses: true,
+      allowMembersToInvite: false,
+      requireApprovalForExpenses: false,
+      ...group.settings
+    },
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });
@@ -376,7 +412,7 @@ export const createGroup = async (group: Omit<Group, 'id' | 'createdAt' | 'updat
   await addGroupActivity({
     groupId: docRef.id,
     userId: group.creatorId,
-    userName: 'Creator',
+    userName: creatorProfile?.displayName || 'Creator',
     type: 'group_created',
     description: `Created group "${group.name}"`,
   });
@@ -396,23 +432,45 @@ export const getGroups = async (userId: string): Promise<Group[]> => {
     ...doc.data(),
     createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt),
     updatedAt: doc.data().updatedAt instanceof Timestamp ? doc.data().updatedAt.toDate() : new Date(doc.data().updatedAt),
+    memberDetails: doc.data().memberDetails?.map((member: any) => ({
+      ...member,
+      joinedAt: member.joinedAt instanceof Timestamp ? member.joinedAt.toDate() : new Date(member.joinedAt)
+    })) || []
   } as Group));
 };
 
 export const addGroupMember = async (groupId: string, userId: string) => {
+  const userProfile = await getUserProfile(userId);
   const groupRef = doc(db, 'groups', groupId);
+  
   await updateDoc(groupRef, {
     members: arrayUnion(userId),
+    memberDetails: arrayUnion({
+      userId,
+      displayName: userProfile?.displayName || 'Member',
+      email: userProfile?.email || '',
+      role: 'member',
+      joinedAt: serverTimestamp()
+    }),
     updatedAt: serverTimestamp()
   });
 };
 
 export const removeGroupMember = async (groupId: string, userId: string) => {
   const groupRef = doc(db, 'groups', groupId);
-  await updateDoc(groupRef, {
-    members: arrayRemove(userId),
-    updatedAt: serverTimestamp()
-  });
+  const groupSnap = await getDoc(groupRef);
+  
+  if (groupSnap.exists()) {
+    const groupData = groupSnap.data() as Group;
+    const memberToRemove = groupData.memberDetails?.find(m => m.userId === userId);
+    
+    await updateDoc(groupRef, {
+      members: arrayRemove(userId),
+      admins: arrayRemove(userId),
+      memberDetails: arrayRemove(memberToRemove),
+      updatedAt: serverTimestamp()
+    });
+  }
 };
 
 export const updateGroup = async (groupId: string, updates: Partial<Group>) => {
@@ -425,79 +483,117 @@ export const updateGroup = async (groupId: string, updates: Partial<Group>) => {
 
 export const promoteToAdmin = async (groupId: string, userId: string, promotedBy: string) => {
   const groupRef = doc(db, 'groups', groupId);
-  await updateDoc(groupRef, {
-    admins: arrayUnion(userId),
-    updatedAt: serverTimestamp()
-  });
+  const groupSnap = await getDoc(groupRef);
   
-  await addGroupActivity({
-    groupId,
-    userId: promotedBy,
-    userName: 'Admin',
-    type: 'member_promoted',
-    description: `Promoted member to admin`,
-    metadata: { promotedUserId: userId }
-  });
+  if (groupSnap.exists()) {
+    const groupData = groupSnap.data() as Group;
+    const updatedMemberDetails = groupData.memberDetails?.map(member => 
+      member.userId === userId ? { ...member, role: 'admin' } : member
+    ) || [];
+    
+    await updateDoc(groupRef, {
+      admins: arrayUnion(userId),
+      memberDetails: updatedMemberDetails,
+      updatedAt: serverTimestamp()
+    });
+    
+    const promotedUser = await getUserProfile(userId);
+    await addGroupActivity({
+      groupId,
+      userId: promotedBy,
+      userName: 'Admin',
+      type: 'member_promoted',
+      description: `Promoted ${promotedUser?.displayName || 'member'} to admin`,
+      metadata: { promotedUserId: userId }
+    });
+  }
 };
 
 export const demoteFromAdmin = async (groupId: string, userId: string, demotedBy: string) => {
   const groupRef = doc(db, 'groups', groupId);
-  await updateDoc(groupRef, {
-    admins: arrayRemove(userId),
-    updatedAt: serverTimestamp()
-  });
+  const groupSnap = await getDoc(groupRef);
   
-  await addGroupActivity({
-    groupId,
-    userId: demotedBy,
-    userName: 'Creator',
-    type: 'member_demoted',
-    description: `Demoted admin to member`,
-    metadata: { demotedUserId: userId }
-  });
+  if (groupSnap.exists()) {
+    const groupData = groupSnap.data() as Group;
+    const updatedMemberDetails = groupData.memberDetails?.map(member => 
+      member.userId === userId ? { ...member, role: 'member' } : member
+    ) || [];
+    
+    await updateDoc(groupRef, {
+      admins: arrayRemove(userId),
+      memberDetails: updatedMemberDetails,
+      updatedAt: serverTimestamp()
+    });
+    
+    const demotedUser = await getUserProfile(userId);
+    await addGroupActivity({
+      groupId,
+      userId: demotedBy,
+      userName: 'Creator',
+      type: 'member_demoted',
+      description: `Demoted ${demotedUser?.displayName || 'admin'} to member`,
+      metadata: { demotedUserId: userId }
+    });
+  }
 };
 
 export const transferGroupOwnership = async (groupId: string, newOwnerId: string, currentOwnerId: string) => {
-  const batch = writeBatch(db);
   const groupRef = doc(db, 'groups', groupId);
+  const groupSnap = await getDoc(groupRef);
   
-  batch.update(groupRef, {
-    creatorId: newOwnerId,
-    admins: arrayUnion(currentOwnerId),
-    updatedAt: serverTimestamp()
-  });
-  
-  await batch.commit();
-  
-  await addGroupActivity({
-    groupId,
-    userId: currentOwnerId,
-    userName: 'Former Owner',
-    type: 'ownership_transferred',
-    description: `Transferred group ownership`,
-    metadata: { newOwnerId }
-  });
+  if (groupSnap.exists()) {
+    const groupData = groupSnap.data() as Group;
+    const updatedMemberDetails = groupData.memberDetails?.map(member => {
+      if (member.userId === newOwnerId) {
+        return { ...member, role: 'creator' };
+      } else if (member.userId === currentOwnerId) {
+        return { ...member, role: 'admin' };
+      }
+      return member;
+    }) || [];
+    
+    await updateDoc(groupRef, {
+      creatorId: newOwnerId,
+      admins: arrayUnion(currentOwnerId),
+      memberDetails: updatedMemberDetails,
+      updatedAt: serverTimestamp()
+    });
+    
+    const newOwner = await getUserProfile(newOwnerId);
+    await addGroupActivity({
+      groupId,
+      userId: currentOwnerId,
+      userName: 'Former Owner',
+      type: 'ownership_transferred',
+      description: `Transferred group ownership to ${newOwner?.displayName || 'member'}`,
+      metadata: { newOwnerId }
+    });
+  }
 };
 
 export const leaveGroup = async (groupId: string, userId: string, userName: string) => {
-  const batch = writeBatch(db);
   const groupRef = doc(db, 'groups', groupId);
+  const groupSnap = await getDoc(groupRef);
   
-  batch.update(groupRef, {
-    members: arrayRemove(userId),
-    admins: arrayRemove(userId),
-    updatedAt: serverTimestamp()
-  });
-  
-  await batch.commit();
-  
-  await addGroupActivity({
-    groupId,
-    userId,
-    userName,
-    type: 'member_left',
-    description: `Left the group`,
-  });
+  if (groupSnap.exists()) {
+    const groupData = groupSnap.data() as Group;
+    const memberToRemove = groupData.memberDetails?.find(m => m.userId === userId);
+    
+    await updateDoc(groupRef, {
+      members: arrayRemove(userId),
+      admins: arrayRemove(userId),
+      memberDetails: arrayRemove(memberToRemove),
+      updatedAt: serverTimestamp()
+    });
+    
+    await addGroupActivity({
+      groupId,
+      userId,
+      userName,
+      type: 'member_left',
+      description: `Left the group`,
+    });
+  }
 };
 
 // Group Invitations
@@ -505,6 +601,7 @@ export const createGroupInvitation = async (invitation: Omit<GroupInvitation, 'i
   const invitationRef = collection(db, 'groupInvitations');
   const docRef = await addDoc(invitationRef, {
     ...invitation,
+    expiresAt: Timestamp.fromDate(new Date(invitation.expiresAt)),
     createdAt: serverTimestamp()
   });
   return docRef.id;
@@ -542,11 +639,7 @@ export const acceptGroupInvitation = async (invitationId: string, userId: string
   batch.update(invitationRef, { status: 'accepted' });
   
   // Add user to group
-  const groupRef = doc(db, 'groups', invitation.groupId);
-  batch.update(groupRef, {
-    members: arrayUnion(userId),
-    updatedAt: serverTimestamp()
-  });
+  await addGroupMember(invitation.groupId, userId);
   
   await batch.commit();
   
@@ -600,10 +693,11 @@ export const createSavingsGoal = async (goal: Omit<GroupSavingsGoal, 'id' | 'cre
     updatedAt: serverTimestamp()
   });
   
+  const creator = await getUserProfile(goal.createdBy);
   await addGroupActivity({
     groupId: goal.groupId,
     userId: goal.createdBy,
-    userName: 'Member',
+    userName: creator?.displayName || 'Member',
     type: 'goal_created',
     description: `Created savings goal "${goal.name}"`,
     metadata: { goalId: docRef.id, targetAmount: goal.targetAmount }
@@ -665,6 +759,7 @@ export const contributeToSavingsGoal = async (goalId: string, contribution: {
     metadata: { goalId, amount: contribution.amount }
   });
 };
+
 // Split Management
 export const createSplit = async (split: Omit<Split, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
   const splitRef = collection(db, 'splits');
@@ -726,6 +821,7 @@ export const addReminder = async (reminder: Omit<Reminder, 'id' | 'createdAt' | 
   const reminderRef = collection(db, 'reminders');
   return await addDoc(reminderRef, {
     ...reminder,
+    dueDate: Timestamp.fromDate(new Date(reminder.dueDate)),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });
@@ -750,8 +846,14 @@ export const getReminders = async (userId: string) => {
 
 export const updateReminder = async (reminderId: string, updates: Partial<Reminder>) => {
   const reminderRef = doc(db, 'reminders', reminderId);
+  const updateData = { ...updates };
+  
+  if (updates.dueDate) {
+    updateData.dueDate = Timestamp.fromDate(new Date(updates.dueDate));
+  }
+  
   await updateDoc(reminderRef, {
-    ...updates,
+    ...updateData,
     updatedAt: serverTimestamp()
   });
 };
@@ -862,6 +964,10 @@ export const subscribeToGroups = (userId: string, callback: (groups: Group[]) =>
       ...doc.data(),
       createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
       updatedAt: doc.data().updatedAt?.toDate?.() || doc.data().updatedAt,
+      memberDetails: doc.data().memberDetails?.map((member: any) => ({
+        ...member,
+        joinedAt: member.joinedAt instanceof Timestamp ? member.joinedAt.toDate() : new Date(member.joinedAt)
+      })) || []
     } as Group));
     callback(groups);
   });
