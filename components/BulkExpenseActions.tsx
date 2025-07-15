@@ -10,14 +10,7 @@ import {
 import { useTheme } from '@/context/ThemeContext';
 import { Expense } from '@/types';
 import { deleteExpense, updateExpense } from '@/services/firestore';
-import {
-  Trash2,
-  Edit3,
-  Tag,
-  Copy,
-  X,
-  Check,
-} from 'lucide-react-native';
+import { Trash2, CreditCard as Edit3, Tag, Copy, X, Check } from 'lucide-react-native';
 
 interface BulkExpenseActionsProps {
   selectedExpenses: Expense[];
