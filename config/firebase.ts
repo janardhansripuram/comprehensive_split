@@ -6,7 +6,7 @@ import { getStorage } from '@firebase/storage';
 // Firebase configuration - Using the same config as web version
 const firebaseConfig = {
   apiKey: "AIzaSyDbGPToe9ip8Ozi0bYDFEdTPeVw27stKis",
-  authDomain: "expenseflow-ykb45.web.app",
+  authDomain: "expenseflow-ykb45.firebaseapp.com",
   projectId: "expenseflow-ykb45",
   storageBucket: "expenseflow-ykb45.firebasestorage.app",
   messagingSenderId: "471981177559",
