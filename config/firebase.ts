@@ -3,7 +3,7 @@ import { getAuth } from '@firebase/auth';
 import { getFirestore } from '@firebase/firestore';
 import { getStorage } from '@firebase/storage';
 
-// Your Firebase config - Replace with your actual Firebase config
+// Firebase configuration - Replace with your actual Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyBxxxxxxxxxxxxxxxxxxxxxxxxxxx",
   authDomain: "your-project.firebaseapp.com",
@@ -13,7 +13,12 @@ const firebaseConfig = {
   appId: "1:123456789:web:xxxxxxxxxxxxxxxxxx"
 };
 
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
+
+// Initialize Firebase services
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+
+export default app;

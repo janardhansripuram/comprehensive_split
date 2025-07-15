@@ -14,7 +14,9 @@ import {
   serverTimestamp,
   writeBatch,
   arrayUnion,
-  arrayRemove
+  arrayRemove,
+  Timestamp,
+  setDoc
 } from '@firebase/firestore';
 import { db } from '@/config/firebase';
 import { 
@@ -33,12 +35,13 @@ import {
 } from '@/types';
 
 // User Management
-export const createUserProfile = async (userId: string, userData: Partial<User>) => {
+export const createUserProfile = async (userId: string, userData: Partial<User>): Promise<void> => {
   const userRef = doc(db, 'users', userId);
-  await updateDoc(userRef, {
+  await setDoc(userRef, {
     ...userData,
+    createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
-  });
+  }, { merge: true });
 };
 
 export const getUserProfile = async (userId: string): Promise<User | null> => {
@@ -48,16 +51,18 @@ export const getUserProfile = async (userId: string): Promise<User | null> => {
 };
 
 // Expense Management
-export const addExpense = async (expense: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>) => {
+export const addExpense = async (expense: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
   const expensesRef = collection(db, 'expenses');
-  return await addDoc(expensesRef, {
+  const docRef = await addDoc(expensesRef, {
     ...expense,
+    date: Timestamp.fromDate(new Date(expense.date)),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });
+  return docRef.id;
 };
 
-export const getExpenses = async (userId: string, filters?: any) => {
+export const getExpenses = async (userId: string, filters?: any): Promise<Expense[]> => {
   let q = query(
     collection(db, 'expenses'),
     where('userId', '==', userId),
@@ -71,26 +76,36 @@ export const getExpenses = async (userId: string, filters?: any) => {
   if (filters?.limit) {
     q = query(q, limit(filters.limit));
   }
+  
+  if (filters?.groupId) {
+    q = query(q, where('groupId', '==', filters.groupId));
+  }
 
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => ({ 
     id: doc.id, 
     ...doc.data(),
-    date: doc.data().date?.toDate?.() || doc.data().date,
-    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
-    updatedAt: doc.data().updatedAt?.toDate?.() || doc.data().updatedAt,
+    date: doc.data().date instanceof Timestamp ? doc.data().date.toDate() : new Date(doc.data().date),
+    createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt),
+    updatedAt: doc.data().updatedAt instanceof Timestamp ? doc.data().updatedAt.toDate() : new Date(doc.data().updatedAt),
   } as Expense));
 };
 
-export const updateExpense = async (expenseId: string, updates: Partial<Expense>) => {
+export const updateExpense = async (expenseId: string, updates: Partial<Expense>): Promise<void> => {
   const expenseRef = doc(db, 'expenses', expenseId);
+  const updateData = { ...updates };
+  
+  if (updates.date) {
+    updateData.date = Timestamp.fromDate(new Date(updates.date));
+  }
+  
   await updateDoc(expenseRef, {
-    ...updates,
+    ...updateData,
     updatedAt: serverTimestamp()
   });
 };
 
-export const deleteExpense = async (expenseId: string) => {
+export const deleteExpense = async (expenseId: string): Promise<void> => {
   const expenseRef = doc(db, 'expenses', expenseId);
   await deleteDoc(expenseRef);
 };
@@ -127,16 +142,18 @@ export const deleteExpenseTemplate = async (templateId: string) => {
 };
 
 // Income Management
-export const addIncome = async (income: Omit<Income, 'id' | 'createdAt' | 'updatedAt'>) => {
+export const addIncome = async (income: Omit<Income, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
   const incomeRef = collection(db, 'income');
-  return await addDoc(incomeRef, {
+  const docRef = await addDoc(incomeRef, {
     ...income,
+    date: Timestamp.fromDate(new Date(income.date)),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });
+  return docRef.id;
 };
 
-export const getIncome = async (userId: string) => {
+export const getIncome = async (userId: string): Promise<Income[]> => {
   const q = query(
     collection(db, 'income'),
     where('userId', '==', userId),
@@ -147,9 +164,9 @@ export const getIncome = async (userId: string) => {
   return snapshot.docs.map(doc => ({ 
     id: doc.id, 
     ...doc.data(),
-    date: doc.data().date?.toDate?.() || doc.data().date,
-    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
-    updatedAt: doc.data().updatedAt?.toDate?.() || doc.data().updatedAt,
+    date: doc.data().date instanceof Timestamp ? doc.data().date.toDate() : new Date(doc.data().date),
+    createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt),
+    updatedAt: doc.data().updatedAt instanceof Timestamp ? doc.data().updatedAt.toDate() : new Date(doc.data().updatedAt),
   } as Income));
 };
 
@@ -167,16 +184,17 @@ export const deleteIncome = async (incomeId: string) => {
 };
 
 // Budget Management
-export const addBudget = async (budget: Omit<Budget, 'id' | 'createdAt' | 'updatedAt'>) => {
+export const addBudget = async (budget: Omit<Budget, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
   const budgetRef = collection(db, 'budgets');
-  return await addDoc(budgetRef, {
+  const docRef = await addDoc(budgetRef, {
     ...budget,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });
+  return docRef.id;
 };
 
-export const getBudgets = async (userId: string, month?: string) => {
+export const getBudgets = async (userId: string, month?: string): Promise<Budget[]> => {
   let q = query(
     collection(db, 'budgets'),
     where('userId', '==', userId)
@@ -190,8 +208,8 @@ export const getBudgets = async (userId: string, month?: string) => {
   return snapshot.docs.map(doc => ({ 
     id: doc.id, 
     ...doc.data(),
-    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
-    updatedAt: doc.data().updatedAt?.toDate?.() || doc.data().updatedAt,
+    createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt),
+    updatedAt: doc.data().updatedAt instanceof Timestamp ? doc.data().updatedAt.toDate() : new Date(doc.data().updatedAt),
   } as Budget));
 };
 
@@ -270,17 +288,18 @@ export const markInsightAsRead = async (insightId: string) => {
 };
 
 // Friend Management
-export const sendFriendRequest = async (fromUserId: string, toEmail: string) => {
+export const sendFriendRequest = async (fromUserId: string, toEmail: string): Promise<string> => {
   const friendRequestRef = collection(db, 'friendRequests');
-  return await addDoc(friendRequestRef, {
+  const docRef = await addDoc(friendRequestRef, {
     fromUserId,
     toEmail,
     status: 'pending',
     createdAt: serverTimestamp()
   });
+  return docRef.id;
 };
 
-export const getFriendRequests = async (userEmail: string) => {
+export const getFriendRequests = async (userEmail: string): Promise<any[]> => {
   const q = query(
     collection(db, 'friendRequests'),
     where('toEmail', '==', userEmail),
@@ -291,7 +310,7 @@ export const getFriendRequests = async (userEmail: string) => {
   return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 };
 
-export const acceptFriendRequest = async (requestId: string, fromUserId: string, toUserId: string) => {
+export const acceptFriendRequest = async (requestId: string, fromUserId: string, toUserId: string): Promise<void> => {
   const batch = writeBatch(db);
 
   // Update request status
@@ -316,7 +335,7 @@ export const acceptFriendRequest = async (requestId: string, fromUserId: string,
   await batch.commit();
 };
 
-export const getFriends = async (userId: string) => {
+export const getFriends = async (userId: string): Promise<any[]> => {
   const q = query(
     collection(db, 'friends'),
     where('userId', '==', userId)
@@ -327,16 +346,17 @@ export const getFriends = async (userId: string) => {
 };
 
 // Group Management
-export const createGroup = async (group: Omit<Group, 'id' | 'createdAt' | 'updatedAt'>) => {
+export const createGroup = async (group: Omit<Group, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
   const groupRef = collection(db, 'groups');
-  return await addDoc(groupRef, {
+  const docRef = await addDoc(groupRef, {
     ...group,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });
+  return docRef.id;
 };
 
-export const getGroups = async (userId: string) => {
+export const getGroups = async (userId: string): Promise<Group[]> => {
   const q = query(
     collection(db, 'groups'),
     where('members', 'array-contains', userId)
@@ -346,8 +366,8 @@ export const getGroups = async (userId: string) => {
   return snapshot.docs.map(doc => ({ 
     id: doc.id, 
     ...doc.data(),
-    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
-    updatedAt: doc.data().updatedAt?.toDate?.() || doc.data().updatedAt,
+    createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt),
+    updatedAt: doc.data().updatedAt instanceof Timestamp ? doc.data().updatedAt.toDate() : new Date(doc.data().updatedAt),
   } as Group));
 };
 
@@ -376,32 +396,54 @@ export const updateGroup = async (groupId: string, updates: Partial<Group>) => {
 };
 
 // Split Management
-export const createSplit = async (split: Omit<Split, 'id' | 'createdAt' | 'updatedAt'>) => {
+export const createSplit = async (split: Omit<Split, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
   const splitRef = collection(db, 'splits');
-  return await addDoc(splitRef, {
+  const docRef = await addDoc(splitRef, {
     ...split,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });
+  return docRef.id;
 };
 
-export const getSplits = async (userId: string) => {
-  const q = query(
+export const getSplits = async (userId: string): Promise<Split[]> => {
+  // Get splits where user is creator or participant
+  const creatorQuery = query(
     collection(db, 'splits'),
-    where('participants.userId', 'array-contains', userId),
+    where('creatorId', '==', userId),
     orderBy('createdAt', 'desc')
   );
 
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ 
+  const creatorSnapshot = await getDocs(creatorQuery);
+  const creatorSplits = creatorSnapshot.docs.map(doc => ({ 
     id: doc.id, 
     ...doc.data(),
-    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
-    updatedAt: doc.data().updatedAt?.toDate?.() || doc.data().updatedAt,
+    createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt),
+    updatedAt: doc.data().updatedAt instanceof Timestamp ? doc.data().updatedAt.toDate() : new Date(doc.data().updatedAt),
   } as Split));
+
+  // Get all splits and filter by participant
+  const allSplitsQuery = query(collection(db, 'splits'));
+  const allSplitsSnapshot = await getDocs(allSplitsQuery);
+  const participantSplits = allSplitsSnapshot.docs
+    .map(doc => ({ 
+      id: doc.id, 
+      ...doc.data(),
+      createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt),
+      updatedAt: doc.data().updatedAt instanceof Timestamp ? doc.data().updatedAt.toDate() : new Date(doc.data().updatedAt),
+    } as Split))
+    .filter(split => split.participants.some(p => p.userId === userId) && split.creatorId !== userId);
+
+  // Combine and deduplicate
+  const allSplits = [...creatorSplits, ...participantSplits];
+  const uniqueSplits = allSplits.filter((split, index, self) => 
+    index === self.findIndex(s => s.id === split.id)
+  );
+
+  return uniqueSplits.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 };
 
-export const updateSplit = async (splitId: string, updates: Partial<Split>) => {
+export const updateSplit = async (splitId: string, updates: Partial<Split>): Promise<void> => {
   const splitRef = doc(db, 'splits', splitId);
   await updateDoc(splitRef, {
     ...updates,
@@ -499,7 +541,7 @@ export const generateExportData = async (userId: string, dateFrom: Date, dateTo:
 };
 
 // Real-time listeners
-export const subscribeToExpenses = (userId: string, callback: (expenses: Expense[]) => void) => {
+export const subscribeToExpenses = (userId: string, callback: (expenses: Expense[]) => void): (() => void) => {
   const q = query(
     collection(db, 'expenses'),
     where('userId', '==', userId),
@@ -511,9 +553,9 @@ export const subscribeToExpenses = (userId: string, callback: (expenses: Expense
     const expenses = snapshot.docs.map(doc => ({ 
       id: doc.id, 
       ...doc.data(),
-      date: doc.data().date?.toDate?.() || doc.data().date,
-      createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
-      updatedAt: doc.data().updatedAt?.toDate?.() || doc.data().updatedAt,
+      date: doc.data().date instanceof Timestamp ? doc.data().date.toDate() : new Date(doc.data().date),
+      createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt),
+      updatedAt: doc.data().updatedAt instanceof Timestamp ? doc.data().updatedAt.toDate() : new Date(doc.data().updatedAt),
     } as Expense));
     callback(expenses);
   });
