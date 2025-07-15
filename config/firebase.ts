@@ -10,7 +10,7 @@ const firebaseConfig = {
   projectId: "expenseflow-ykb45",
   storageBucket: "expenseflow-ykb45.firebasestorage.app",
   messagingSenderId: "471981177559",
-  appId: "1:471981177559:web:e50a964ed89d9c2396ce92"
+  appId: "1:471981177559:android:77b2a0595ad9135f96ce92"
 };
 
 // Initialize Firebase
