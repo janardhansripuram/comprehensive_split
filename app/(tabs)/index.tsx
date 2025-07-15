@@ -14,22 +14,7 @@ import { getExpenses, getIncome, getBudgets, getSplits } from '@/services/firest
 import { Expense, Income, Budget, Split } from '@/types';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import {
-  DollarSign,
-  TrendingUp,
-  TrendingDown,
-  Target,
-  Users,
-  Plus,
-  ArrowUpRight,
-  ArrowDownLeft,
-  Calendar,
-  PieChart,
-  Bell,
-  CreditCard,
-  Wallet,
-  Activity,
-} from 'lucide-react-native';
+import { DollarSign, TrendingUp, TrendingDown, Target, Users, Plus, ArrowUpRight, ArrowDownLeft, Calendar, ChartPie as PieChart, Bell, CreditCard, Wallet, Activity } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
 
