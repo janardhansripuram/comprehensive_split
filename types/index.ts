@@ -65,12 +65,70 @@ export interface Friend {
 export interface Group {
   id: string;
   name: string;
+  description?: string;
   creatorId: string;
+  admins: string[];
   members: string[];
+  memberDetails: {
+    userId: string;
+    displayName: string;
+    email: string;
+    role: 'creator' | 'admin' | 'member';
+    joinedAt: Date;
+  }[];
+  settings: {
+    allowMembersToAddExpenses: boolean;
+    allowMembersToInvite: boolean;
+    requireApprovalForExpenses: boolean;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
 
+export interface GroupInvitation {
+  id: string;
+  groupId: string;
+  groupName: string;
+  invitedBy: string;
+  invitedByName: string;
+  invitedEmail: string;
+  inviteCode?: string;
+  expiresAt: Date;
+  status: 'pending' | 'accepted' | 'declined' | 'expired';
+  createdAt: Date;
+}
+
+export interface GroupActivity {
+  id: string;
+  groupId: string;
+  userId: string;
+  userName: string;
+  type: 'member_joined' | 'member_left' | 'expense_added' | 'expense_split' | 'payment_made' | 'goal_created' | 'goal_contribution' | 'member_promoted' | 'member_demoted' | 'ownership_transferred' | 'group_updated';
+  description: string;
+  metadata?: any;
+  createdAt: Date;
+}
+
+export interface GroupSavingsGoal {
+  id: string;
+  groupId: string;
+  name: string;
+  description: string;
+  targetAmount: number;
+  currentAmount: number;
+  currency: string;
+  targetDate?: Date;
+  createdBy: string;
+  contributions: {
+    userId: string;
+    userName: string;
+    amount: number;
+    date: Date;
+  }[];
+  status: 'active' | 'completed' | 'cancelled';
+  createdAt: Date;
+  updatedAt: Date;
+}
 export interface Split {
   id: string;
   expenseId: string;

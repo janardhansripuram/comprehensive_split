@@ -19,6 +19,10 @@ import { router } from 'expo-router';
 import DebtTracker from '@/components/DebtTracker';
 import SocialFeed from '@/components/SocialFeed';
 import PaymentRequests from '@/components/PaymentRequests';
+import GroupManagement from '@/components/GroupManagement';
+import GroupInvitations from '@/components/GroupInvitations';
+import GroupActivityLog from '@/components/GroupActivityLog';
+import GroupSavingsGoals from '@/components/GroupSavingsGoals';
 import {
   Users,
   Plus,
@@ -31,6 +35,9 @@ import {
   CreditCard,
   MessageCircle,
   Send,
+  UserPlus,
+  Activity,
+  Target,
 } from 'lucide-react-native';
 
 export default function GroupsScreen() {
@@ -43,6 +50,10 @@ export default function GroupsScreen() {
   const [showDebtTracker, setShowDebtTracker] = useState(false);
   const [showSocialFeed, setShowSocialFeed] = useState(false);
   const [showPaymentRequests, setShowPaymentRequests] = useState(false);
+  const [showGroupManagement, setShowGroupManagement] = useState<Group | null>(null);
+  const [showGroupInvitations, setShowGroupInvitations] = useState<Group | null>(null);
+  const [showGroupActivityLog, setShowGroupActivityLog] = useState<Group | null>(null);
+  const [showGroupSavingsGoals, setShowGroupSavingsGoals] = useState<Group | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [groupName, setGroupName] = useState('');
@@ -308,6 +319,28 @@ export default function GroupsScreen() {
     modalButtonTextPrimary: {
       color: '#FFFFFF',
     },
+    groupActions: {
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      marginTop: 16,
+      paddingTop: 16,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    groupActionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.background,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+    groupActionText: {
+      fontSize: 12,
+      fontFamily: 'Inter-Medium',
+      color: colors.text,
+      marginLeft: 4,
+    },
     emptyState: {
       alignItems: 'center',
       padding: 40,
@@ -387,6 +420,14 @@ export default function GroupsScreen() {
             <Send size={24} color={colors.accent} />
             <Text style={styles.quickActionText}>Requests</Text>
           </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.quickActionButton}
+            onPress={() => setShowGroupInvitations(groups[0])}
+          >
+            <UserPlus size={24} color={colors.warning} />
+            <Text style={styles.quickActionText}>Invitations</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -421,6 +462,12 @@ export default function GroupsScreen() {
                   <TouchableOpacity style={styles.settingsButton}>
                     <Settings size={20} color={colors.textSecondary} />
                   </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={styles.settingsButton}
+                    onPress={() => setShowGroupManagement(group)}
+                  >
+                    <Settings size={20} color={colors.textSecondary} />
+                  </TouchableOpacity>
                 </View>
 
                 <View style={styles.groupStats}>
@@ -436,6 +483,33 @@ export default function GroupsScreen() {
                     <Text style={styles.statValue}>{group.members.length}</Text>
                     <Text style={styles.statLabel}>Members</Text>
                   </View>
+                </View>
+                
+                {/* Group Actions */}
+                <View style={styles.groupActions}>
+                  <TouchableOpacity 
+                    style={styles.groupActionButton}
+                    onPress={() => setShowGroupActivityLog(group)}
+                  >
+                    <Activity size={16} color={colors.primary} />
+                    <Text style={styles.groupActionText}>Activity</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={styles.groupActionButton}
+                    onPress={() => setShowGroupSavingsGoals(group)}
+                  >
+                    <Target size={16} color={colors.accent} />
+                    <Text style={styles.groupActionText}>Goals</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={styles.groupActionButton}
+                    onPress={() => setShowGroupInvitations(group)}
+                  >
+                    <UserPlus size={16} color={colors.secondary} />
+                    <Text style={styles.groupActionText}>Invite</Text>
+                  </TouchableOpacity>
                 </View>
               </TouchableOpacity>
             );
@@ -526,6 +600,46 @@ export default function GroupsScreen() {
         visible={showPaymentRequests}
         onClose={() => setShowPaymentRequests(false)}
       />
+      
+      {/* Group Management */}
+      {showGroupManagement && (
+        <GroupManagement
+          visible={!!showGroupManagement}
+          onClose={() => setShowGroupManagement(null)}
+          group={showGroupManagement}
+          onGroupUpdated={loadGroups}
+        />
+      )}
+      
+      {/* Group Invitations */}
+      {showGroupInvitations && (
+        <GroupInvitations
+          visible={!!showGroupInvitations}
+          onClose={() => setShowGroupInvitations(null)}
+          groupId={showGroupInvitations.id}
+          groupName={showGroupInvitations.name}
+        />
+      )}
+      
+      {/* Group Activity Log */}
+      {showGroupActivityLog && (
+        <GroupActivityLog
+          visible={!!showGroupActivityLog}
+          onClose={() => setShowGroupActivityLog(null)}
+          groupId={showGroupActivityLog.id}
+          groupName={showGroupActivityLog.name}
+        />
+      )}
+      
+      {/* Group Savings Goals */}
+      {showGroupSavingsGoals && (
+        <GroupSavingsGoals
+          visible={!!showGroupSavingsGoals}
+          onClose={() => setShowGroupSavingsGoals(null)}
+          groupId={showGroupSavingsGoals.id}
+          groupName={showGroupSavingsGoals.name}
+        />
+      )}
     </View>
   );
 }

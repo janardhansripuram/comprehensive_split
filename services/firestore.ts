@@ -16,7 +16,8 @@ import {
   arrayUnion,
   arrayRemove,
   Timestamp,
-  setDoc
+  setDoc,
+  increment
 } from '@firebase/firestore';
 import { db } from '@/config/firebase';
 import { 
@@ -24,6 +25,9 @@ import {
   Income, 
   Budget, 
   Group, 
+  GroupInvitation,
+  GroupActivity,
+  GroupSavingsGoal,
   Split, 
   Reminder, 
   Friend,
@@ -353,6 +357,16 @@ export const createGroup = async (group: Omit<Group, 'id' | 'createdAt' | 'updat
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });
+  
+  // Add initial activity log
+  await addGroupActivity({
+    groupId: docRef.id,
+    userId: group.creatorId,
+    userName: 'Creator',
+    type: 'group_created',
+    description: `Created group "${group.name}"`,
+  });
+  
   return docRef.id;
 };
 
@@ -395,6 +409,248 @@ export const updateGroup = async (groupId: string, updates: Partial<Group>) => {
   });
 };
 
+export const promoteToAdmin = async (groupId: string, userId: string, promotedBy: string) => {
+  const groupRef = doc(db, 'groups', groupId);
+  await updateDoc(groupRef, {
+    admins: arrayUnion(userId),
+    updatedAt: serverTimestamp()
+  });
+  
+  await addGroupActivity({
+    groupId,
+    userId: promotedBy,
+    userName: 'Admin',
+    type: 'member_promoted',
+    description: `Promoted member to admin`,
+    metadata: { promotedUserId: userId }
+  });
+};
+
+export const demoteFromAdmin = async (groupId: string, userId: string, demotedBy: string) => {
+  const groupRef = doc(db, 'groups', groupId);
+  await updateDoc(groupRef, {
+    admins: arrayRemove(userId),
+    updatedAt: serverTimestamp()
+  });
+  
+  await addGroupActivity({
+    groupId,
+    userId: demotedBy,
+    userName: 'Creator',
+    type: 'member_demoted',
+    description: `Demoted admin to member`,
+    metadata: { demotedUserId: userId }
+  });
+};
+
+export const transferGroupOwnership = async (groupId: string, newOwnerId: string, currentOwnerId: string) => {
+  const batch = writeBatch(db);
+  const groupRef = doc(db, 'groups', groupId);
+  
+  batch.update(groupRef, {
+    creatorId: newOwnerId,
+    admins: arrayUnion(currentOwnerId),
+    updatedAt: serverTimestamp()
+  });
+  
+  await batch.commit();
+  
+  await addGroupActivity({
+    groupId,
+    userId: currentOwnerId,
+    userName: 'Former Owner',
+    type: 'ownership_transferred',
+    description: `Transferred group ownership`,
+    metadata: { newOwnerId }
+  });
+};
+
+export const leaveGroup = async (groupId: string, userId: string, userName: string) => {
+  const batch = writeBatch(db);
+  const groupRef = doc(db, 'groups', groupId);
+  
+  batch.update(groupRef, {
+    members: arrayRemove(userId),
+    admins: arrayRemove(userId),
+    updatedAt: serverTimestamp()
+  });
+  
+  await batch.commit();
+  
+  await addGroupActivity({
+    groupId,
+    userId,
+    userName,
+    type: 'member_left',
+    description: `Left the group`,
+  });
+};
+
+// Group Invitations
+export const createGroupInvitation = async (invitation: Omit<GroupInvitation, 'id' | 'createdAt'>): Promise<string> => {
+  const invitationRef = collection(db, 'groupInvitations');
+  const docRef = await addDoc(invitationRef, {
+    ...invitation,
+    createdAt: serverTimestamp()
+  });
+  return docRef.id;
+};
+
+export const getGroupInvitations = async (email: string): Promise<GroupInvitation[]> => {
+  const q = query(
+    collection(db, 'groupInvitations'),
+    where('invitedEmail', '==', email),
+    where('status', '==', 'pending'),
+    orderBy('createdAt', 'desc')
+  );
+
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ 
+    id: doc.id, 
+    ...doc.data(),
+    expiresAt: doc.data().expiresAt?.toDate?.() || doc.data().expiresAt,
+    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
+  } as GroupInvitation));
+};
+
+export const acceptGroupInvitation = async (invitationId: string, userId: string, userName: string) => {
+  const invitationRef = doc(db, 'groupInvitations', invitationId);
+  const invitationSnap = await getDoc(invitationRef);
+  
+  if (!invitationSnap.exists()) {
+    throw new Error('Invitation not found');
+  }
+  
+  const invitation = invitationSnap.data() as GroupInvitation;
+  const batch = writeBatch(db);
+  
+  // Update invitation status
+  batch.update(invitationRef, { status: 'accepted' });
+  
+  // Add user to group
+  const groupRef = doc(db, 'groups', invitation.groupId);
+  batch.update(groupRef, {
+    members: arrayUnion(userId),
+    updatedAt: serverTimestamp()
+  });
+  
+  await batch.commit();
+  
+  // Add activity log
+  await addGroupActivity({
+    groupId: invitation.groupId,
+    userId,
+    userName,
+    type: 'member_joined',
+    description: `Joined the group`,
+  });
+};
+
+export const declineGroupInvitation = async (invitationId: string) => {
+  const invitationRef = doc(db, 'groupInvitations', invitationId);
+  await updateDoc(invitationRef, { status: 'declined' });
+};
+
+// Group Activity Log
+export const addGroupActivity = async (activity: Omit<GroupActivity, 'id' | 'createdAt'>) => {
+  const activityRef = collection(db, 'groupActivities');
+  await addDoc(activityRef, {
+    ...activity,
+    createdAt: serverTimestamp()
+  });
+};
+
+export const getGroupActivities = async (groupId: string): Promise<GroupActivity[]> => {
+  const q = query(
+    collection(db, 'groupActivities'),
+    where('groupId', '==', groupId),
+    orderBy('createdAt', 'desc'),
+    limit(50)
+  );
+
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ 
+    id: doc.id, 
+    ...doc.data(),
+    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
+  } as GroupActivity));
+};
+
+// Group Savings Goals
+export const createSavingsGoal = async (goal: Omit<GroupSavingsGoal, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
+  const goalRef = collection(db, 'groupSavingsGoals');
+  const docRef = await addDoc(goalRef, {
+    ...goal,
+    targetDate: goal.targetDate ? Timestamp.fromDate(new Date(goal.targetDate)) : null,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  });
+  
+  await addGroupActivity({
+    groupId: goal.groupId,
+    userId: goal.createdBy,
+    userName: 'Member',
+    type: 'goal_created',
+    description: `Created savings goal "${goal.name}"`,
+    metadata: { goalId: docRef.id, targetAmount: goal.targetAmount }
+  });
+  
+  return docRef.id;
+};
+
+export const getGroupSavingsGoals = async (groupId: string): Promise<GroupSavingsGoal[]> => {
+  const q = query(
+    collection(db, 'groupSavingsGoals'),
+    where('groupId', '==', groupId),
+    orderBy('createdAt', 'desc')
+  );
+
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ 
+    id: doc.id, 
+    ...doc.data(),
+    targetDate: doc.data().targetDate?.toDate?.() || doc.data().targetDate,
+    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
+    updatedAt: doc.data().updatedAt?.toDate?.() || doc.data().updatedAt,
+    contributions: doc.data().contributions?.map((contrib: any) => ({
+      ...contrib,
+      date: contrib.date?.toDate?.() || contrib.date
+    })) || []
+  } as GroupSavingsGoal));
+};
+
+export const contributeToSavingsGoal = async (goalId: string, contribution: {
+  userId: string;
+  userName: string;
+  amount: number;
+}) => {
+  const goalRef = doc(db, 'groupSavingsGoals', goalId);
+  const goalSnap = await getDoc(goalRef);
+  
+  if (!goalSnap.exists()) {
+    throw new Error('Savings goal not found');
+  }
+  
+  const goal = goalSnap.data() as GroupSavingsGoal;
+  
+  await updateDoc(goalRef, {
+    currentAmount: increment(contribution.amount),
+    contributions: arrayUnion({
+      ...contribution,
+      date: serverTimestamp()
+    }),
+    updatedAt: serverTimestamp()
+  });
+  
+  await addGroupActivity({
+    groupId: goal.groupId,
+    userId: contribution.userId,
+    userName: contribution.userName,
+    type: 'goal_contribution',
+    description: `Contributed $${contribution.amount} to "${goal.name}"`,
+    metadata: { goalId, amount: contribution.amount }
+  });
+};
 // Split Management
 export const createSplit = async (split: Omit<Split, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
   const splitRef = collection(db, 'splits');
