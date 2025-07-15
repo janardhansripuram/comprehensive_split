@@ -23,18 +23,7 @@ import {
 } from '@/services/firestore';
 import { Group, Expense } from '@/types';
 import { LinearGradient } from 'expo-linear-gradient';
-import {
-  ArrowLeft,
-  Users,
-  Plus,
-  DollarSign,
-  Calendar,
-  Settings,
-  UserPlus,
-  UserMinus,
-  Edit3,
-  Trash2,
-} from 'lucide-react-native';
+import { ArrowLeft, Users, Plus, DollarSign, Calendar, Settings, UserPlus, UserMinus, CreditCard as Edit3, Trash2 } from 'lucide-react-native';
 
 export default function GroupDetailsScreen() {
   const { colors } = useTheme();
