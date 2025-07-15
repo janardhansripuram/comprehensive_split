@@ -186,8 +186,6 @@ export default function SplitExpenseModal({
   const handleCreateSplit = async () => {
     if (!expense || !user || !validateSplit()) return;
 
-          name: 'You',
-          userName: user.displayName || 'You',
     try {
       const selectedParticipants = participants.filter(p => p.selected);
       
