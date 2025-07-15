@@ -23,22 +23,7 @@ import {
   getFriends
 } from '@/services/firestore';
 import { Group, Friend } from '@/types';
-import {
-  Settings,
-  UserPlus,
-  UserMinus,
-  Crown,
-  Shield,
-  User,
-  Edit3,
-  Save,
-  X,
-  ChevronRight,
-  LogOut,
-  Users,
-  ToggleLeft,
-  ToggleRight,
-} from 'lucide-react-native';
+import { Settings, UserPlus, UserMinus, Crown, Shield, User, CreditCard as Edit3, Save, X, ChevronRight, LogOut, Users, ToggleLeft, ToggleRight } from 'lucide-react-native';
 
 interface GroupManagementProps {
   visible: boolean;

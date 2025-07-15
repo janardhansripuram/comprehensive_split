@@ -21,17 +21,7 @@ import {
 } from '@/services/firestore';
 import { GroupSavingsGoal } from '@/types';
 import { LinearGradient } from 'expo-linear-gradient';
-import {
-  Target,
-  Plus,
-  DollarSign,
-  Calendar,
-  Users,
-  TrendingUp,
-  CheckCircle,
-  X,
-  Save,
-} from 'lucide-react-native';
+import { Target, Plus, DollarSign, Calendar, Users, TrendingUp, CircleCheck as CheckCircle, X, Save } from 'lucide-react-native';
 
 interface GroupSavingsGoalsProps {
   visible: boolean;
