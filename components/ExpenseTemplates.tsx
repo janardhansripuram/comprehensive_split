@@ -13,13 +13,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { getExpenseTemplates, saveExpenseTemplate, deleteExpenseTemplate } from '@/services/firestore';
 import { ExpenseTemplate } from '@/types';
-import {
-  Plus,
-  Template,
-  Trash2,
-  X,
-  Save,
-} from 'lucide-react-native';
+import { Plus, LayoutTemplate as Template, Trash2, X, Save } from 'lucide-react-native';
 
 interface ExpenseTemplatesProps {
   visible: boolean;
