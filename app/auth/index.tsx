@@ -33,6 +33,8 @@ export default function AuthScreen() {
       return;
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
+    
     if (!isLogin && password !== confirmPassword) {
       Alert.alert('Error', 'Passwords do not match');
       return;
@@ -41,14 +43,16 @@ export default function AuthScreen() {
     setLoading(true);
     try {
       if (isLogin) {
-        await signInWithEmailAndPassword(auth, email, password);
+        console.log('Signing in with email:', normalizedEmail);
+        await signInWithEmailAndPassword(auth, normalizedEmail, password);
       } else {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        console.log('Creating account with email:', normalizedEmail);
+        const userCredential = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
         
         // Create user profile in Firestore
         await createUserProfile(userCredential.user.uid, {
-          email: userCredential.user.email || email,
-          displayName: userCredential.user.displayName || email.split('@')[0],
+          email: userCredential.user.email || normalizedEmail,
+          displayName: userCredential.user.displayName || normalizedEmail.split('@')[0],
           defaultCurrency: 'USD',
         });
         
@@ -169,7 +173,7 @@ export default function AuthScreen() {
               <TextInput
                 style={styles.input}
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(text) => setEmail(text.trim())}
                 placeholder="Enter your email"
                 placeholderTextColor={colors.textSecondary}
                 keyboardType="email-address"

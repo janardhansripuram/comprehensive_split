@@ -62,6 +62,8 @@ function GroupsScreen() {
   useEffect(() => {
     if (user) {
       loadGroups();
+      console.log('User ID for groups:', user.uid);
+      console.log('User email:', user.email);
     }
   }, [user]);
 
@@ -70,6 +72,7 @@ function GroupsScreen() {
     
     setLoading(true);
     try {
+      console.log('Loading groups for user:', user.uid);
       const groupsData = await getGroups(user.uid);
       console.log('Groups data:', groupsData);
       setGroups(groupsData);
@@ -100,13 +103,14 @@ function GroupsScreen() {
       return;
     }
 
+    console.log('Creating group with name:', groupName.trim());
     setCreating(true);
     try {
       await createGroup({
         name: groupName.trim(),
         description: groupDescription.trim(),
         creatorId: user.uid,
-        members: [user.uid],
+        members: [user.uid]
       });
 
       Alert.alert('Success', 'Group created successfully!');
@@ -125,7 +129,7 @@ function GroupsScreen() {
   const getGroupStats = (group: Group) => {
     const expenses = groupExpenses[group.id] || [];
     const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-    const recentActivity = expenses && expenses.length > 0 
+    const recentActivity = expenses.length > 0 
       ? `Last expense: ${expenses[0]?.description || 'No expenses'}`
       : 'No recent activity';
     
@@ -458,7 +462,7 @@ function GroupsScreen() {
                   <View style={styles.groupInfo}>
                     <Text style={styles.groupName}>{group.name}</Text>
                     {group.description && (
-                      <Text style={styles.groupDescription}>{group.description}</Text>
+                      <Text style={styles.groupDescription}>{group.description || ''}</Text>
                     )}
                     <Text style={styles.groupMembers}>
                       {group.members.length} member{group.members.length !== 1 ? 's' : ''}
