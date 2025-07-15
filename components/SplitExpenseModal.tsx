@@ -12,7 +12,7 @@ import {
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import { getFriends, createSplit } from '@/services/firestore';
-import { Expense } from '@/types';
+import { Expense, Split } from '@/types';
 import {
   X,
   Users,
@@ -42,6 +42,7 @@ type SplitMethod = 'equal' | 'amount' | 'percentage';
 interface Participant {
   userId: string;
   name: string;
+  userName: string;
   email: string;
   amount: number;
   percentage: number;
@@ -185,21 +186,25 @@ export default function SplitExpenseModal({
   const handleCreateSplit = async () => {
     if (!expense || !user || !validateSplit()) return;
 
-    setLoading(true);
+          name: 'You',
+          userName: user.displayName || 'You',
     try {
       const selectedParticipants = participants.filter(p => p.selected);
       
       await createSplit({
         expenseId: expense.id,
         creatorId: user.uid,
-        participants: selectedParticipants.map(p => ({
+        participants: selectedParticipants.map((p) => ({
           userId: p.userId,
+          userName: friend.displayName || friend.email || 'Unknown',
+          userName: p.userName || p.name,
           amount: p.amount,
           paid: p.userId === user.uid, // Creator has already paid
           settled: false,
         })),
         type: splitMethod,
         groupId: expense.groupId,
+        status: 'unsettled',
       });
 
       Alert.alert('Success', 'Expense split created successfully!');

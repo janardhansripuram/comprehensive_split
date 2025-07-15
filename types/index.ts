@@ -3,6 +3,13 @@ export interface User {
   email: string;
   displayName: string;
   defaultCurrency: string;
+  walletBalances: { [currency: string]: number };
+  referralCode?: string;
+  referredBy?: string;
+  rewardPoints: number;
+  streakCount: number;
+  lastExpenseDate?: Date;
+  subscriptionPlan: 'free' | 'premium';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -22,6 +29,9 @@ export interface Expense {
   recurringType?: 'daily' | 'weekly' | 'monthly' | 'yearly';
   recurringEndDate?: Date;
   groupId?: string;
+  splitId?: string;
+  merchant?: string;
+  extractedData?: any;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -47,19 +57,82 @@ export interface Budget {
   category: string;
   amount: number;
   currency: string;
-  month: string; // YYYY-MM format
-  period?: 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  period: 'weekly' | 'monthly' | 'yearly' | 'custom';
+  startDate?: Date;
+  endDate?: Date;
   rollover?: boolean;
-  alertThreshold?: number; // percentage (e.g., 80 for 80%)
+  alertThreshold?: number;
+  aiSuggested?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
 
+export interface SavingsGoal {
+  id: string;
+  userId: string;
+  groupId?: string;
+  name: string;
+  description?: string;
+  targetAmount: number;
+  currentAmount: number;
+  currency: string;
+  targetDate?: Date;
+  contributions: {
+    userId: string;
+    userName: string;
+    amount: number;
+    date: Date;
+  }[];
+  status: 'active' | 'completed' | 'paused';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface Investment {
+  id: string;
+  userId: string;
+  type: 'stock' | 'crypto' | 'real_estate' | 'bond' | 'mutual_fund' | 'other';
+  name: string;
+  symbol?: string;
+  quantity: number;
+  purchasePrice: number;
+  currentPrice: number;
+  currency: string;
+  purchaseDate: Date;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface WalletTransaction {
+  id: string;
+  fromUserId: string;
+  toUserId: string;
+  amount: number;
+  currency: string;
+  type: 'transfer' | 'settlement' | 'add_funds';
+  description: string;
+  splitId?: string;
+  status: 'completed' | 'pending' | 'failed';
+  createdAt: Date;
+}
+
 export interface Friend {
   id: string;
-  email: string;
-  displayName: string;
-  status: 'pending' | 'accepted';
+  userId: string;
+  friendId: string;
+  status: 'pending' | 'accepted' | 'blocked';
+  createdAt: Date;
+}
+
+export interface FriendRequest {
+  id: string;
+  fromUserId: string;
+  fromUserName: string;
+  fromUserEmail: string;
+  toEmail: string;
+  status: 'pending' | 'accepted' | 'declined';
+  createdAt: Date;
 }
 
 export interface Group {
@@ -81,6 +154,7 @@ export interface Group {
     allowMembersToInvite: boolean;
     requireApprovalForExpenses: boolean;
   };
+  inviteCode?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -109,38 +183,37 @@ export interface GroupActivity {
   createdAt: Date;
 }
 
-export interface GroupSavingsGoal {
-  id: string;
-  groupId: string;
-  name: string;
-  description: string;
-  targetAmount: number;
-  currentAmount: number;
-  currency: string;
-  targetDate?: Date;
-  createdBy: string;
-  contributions: {
-    userId: string;
-    userName: string;
-    amount: number;
-    date: Date;
-  }[];
-  status: 'active' | 'completed' | 'cancelled';
-  createdAt: Date;
-  updatedAt: Date;
-}
 export interface Split {
   id: string;
   expenseId: string;
   creatorId: string;
   participants: {
     userId: string;
+    userName: string;
     amount: number;
     paid: boolean;
     settled: boolean;
+    paymentMethod?: 'wallet' | 'manual';
+    settlementRequestId?: string;
   }[];
   type: 'equal' | 'amount' | 'percentage';
   groupId?: string;
+  status: 'unsettled' | 'pending' | 'settled';
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface SettlementRequest {
+  id: string;
+  splitId: string;
+  fromUserId: string;
+  toUserId: string;
+  amount: number;
+  currency: string;
+  paymentMethod: 'wallet' | 'manual';
+  status: 'pending' | 'approved' | 'rejected';
+  notes?: string;
+  proofImageUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -153,36 +226,58 @@ export interface Reminder {
   dueDate: Date;
   completed: boolean;
   recurring: 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+  category?: string;
+  amount?: number;
+  currency?: string;
   createdAt: Date;
   updatedAt: Date;
 }
 
-export interface ExpenseTemplate {
+export interface Notification {
   id: string;
   userId: string;
-  name: string;
-  description: string;
-  amount: number;
-  category: string;
-  currency: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface BudgetAlert {
-  id: string;
-  userId: string;
-  budgetId: string;
-  type: 'threshold' | 'exceeded' | 'rollover';
+  type: 'friend_request' | 'group_invite' | 'settlement_request' | 'reminder' | 'achievement' | 'system';
+  title: string;
   message: string;
+  data?: any;
   read: boolean;
   createdAt: Date;
 }
 
-export interface SpendingInsight {
+export interface Achievement {
   id: string;
   userId: string;
-  type: 'trend' | 'anomaly' | 'recommendation' | 'achievement';
+  type: 'first_expense' | 'first_budget' | 'savings_goal' | 'streak_7' | 'streak_30' | 'referral' | 'group_creator';
+  title: string;
+  description: string;
+  badgeUrl?: string;
+  rewardPoints: number;
+  unlockedAt: Date;
+}
+
+export interface ReferralReward {
+  id: string;
+  referrerId: string;
+  referredUserId: string;
+  rewardPoints: number;
+  status: 'pending' | 'awarded';
+  createdAt: Date;
+}
+
+export interface SystemActivity {
+  id: string;
+  userId: string;
+  userName: string;
+  action: string;
+  details: string;
+  metadata?: any;
+  createdAt: Date;
+}
+
+export interface AIInsight {
+  id: string;
+  userId: string;
+  type: 'budget_suggestion' | 'anomaly_detection' | 'spending_summary' | 'savings_tip';
   title: string;
   description: string;
   data?: any;
@@ -191,22 +286,34 @@ export interface SpendingInsight {
   createdAt: Date;
 }
 
-export interface ExportData {
-  expenses: Expense[];
-  income: Income[];
-  budgets: Budget[];
-  dateRange: {
-    from: Date;
-    to: Date;
-  };
-  summary: {
-    totalExpenses: number;
-    totalIncome: number;
-    netSavings: number;
-    topCategories: { category: string; amount: number }[];
-  };
+export interface CurrencyRate {
+  id: string;
+  fromCurrency: string;
+  toCurrency: string;
+  rate: number;
+  lastUpdated: Date;
 }
 
+export interface FeatureFlag {
+  id: string;
+  name: string;
+  enabled: boolean;
+  description?: string;
+  updatedAt: Date;
+}
+
+export interface BroadcastMessage {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'success' | 'error';
+  targetUsers?: string[];
+  active: boolean;
+  createdAt: Date;
+  expiresAt?: Date;
+}
+
+// Constants
 export const EXPENSE_CATEGORIES = [
   'Food & Dining',
   'Transportation',
@@ -261,16 +368,47 @@ export const CURRENCIES = [
   { code: 'KRW', symbol: '₩', name: 'South Korean Won' },
 ];
 
-export const BUDGET_PERIODS = [
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'monthly', label: 'Monthly' },
-  { value: 'quarterly', label: 'Quarterly' },
-  { value: 'yearly', label: 'Yearly' },
+export const INVESTMENT_TYPES = [
+  { value: 'stock', label: 'Stocks' },
+  { value: 'crypto', label: 'Cryptocurrency' },
+  { value: 'real_estate', label: 'Real Estate' },
+  { value: 'bond', label: 'Bonds' },
+  { value: 'mutual_fund', label: 'Mutual Funds' },
+  { value: 'other', label: 'Other' },
 ];
 
-export const RECURRING_TYPES = [
-  { value: 'daily', label: 'Daily' },
-  { value: 'weekly', label: 'Weekly' },
-  { value: 'monthly', label: 'Monthly' },
-  { value: 'yearly', label: 'Yearly' },
-];
+export const SUBSCRIPTION_PLANS = {
+  free: {
+    name: 'Free',
+    price: 0,
+    features: [
+      'Basic expense tracking',
+      'Up to 3 groups',
+      'Basic reports',
+      'Manual receipt entry'
+    ],
+    limits: {
+      groups: 3,
+      monthlyExpenses: 100,
+      aiQueries: 5
+    }
+  },
+  premium: {
+    name: 'Premium',
+    price: 9.99,
+    features: [
+      'Unlimited expense tracking',
+      'Unlimited groups',
+      'Advanced reports & analytics',
+      'AI-powered receipt scanning',
+      'Budget suggestions',
+      'Anomaly detection',
+      'Priority support'
+    ],
+    limits: {
+      groups: -1, // unlimited
+      monthlyExpenses: -1, // unlimited
+      aiQueries: -1 // unlimited
+    }
+  }
+};

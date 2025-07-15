@@ -12,9 +12,9 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from '@firebase/auth';
 import { auth } from '@/config/firebase';
-import { createUserProfile } from '@/services/firestore';
+import { createUserProfile, processReferral } from '@/services/firestore';
 import { useTheme } from '@/context/ThemeContext';
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
+import { Mail, Lock, Eye, EyeOff, Users } from 'lucide-react-native';
 import { router } from 'expo-router';
 
 export default function AuthScreen() {
@@ -24,6 +24,7 @@ export default function AuthScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleAuth = async () => {
@@ -50,6 +51,11 @@ export default function AuthScreen() {
           displayName: userCredential.user.displayName || email.split('@')[0],
           defaultCurrency: 'USD',
         });
+        
+        // Process referral if code provided
+        if (referralCode.trim()) {
+          await processReferral(referralCode.trim(), userCredential.user.uid);
+        }
       }
       router.replace('/(tabs)');
     } catch (error: any) {
@@ -212,6 +218,23 @@ export default function AuthScreen() {
                   placeholderTextColor={colors.textSecondary}
                   secureTextEntry={!showPassword}
                   autoComplete="password"
+                />
+              </View>
+            </View>
+          )}
+
+          {!isLogin && (
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Referral Code (Optional)</Text>
+              <View style={styles.inputWrapper}>
+                <Users size={20} color={colors.textSecondary} />
+                <TextInput
+                  style={styles.input}
+                  value={referralCode}
+                  onChangeText={setReferralCode}
+                  placeholder="Enter referral code"
+                  placeholderTextColor={colors.textSecondary}
+                  autoCapitalize="characters"
                 />
               </View>
             </View>

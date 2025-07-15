@@ -21,28 +21,40 @@ import {
 } from '@firebase/firestore';
 import { db } from '@/config/firebase';
 import { 
+  User,
   Expense, 
   Income, 
   Budget, 
   Group, 
   GroupInvitation,
   GroupActivity,
-  GroupSavingsGoal,
-  Split, 
+  Split,
+  SettlementRequest,
   Reminder, 
   Friend,
-  User,
-  ExpenseTemplate,
-  BudgetAlert,
-  SpendingInsight,
-  ExportData
+  FriendRequest,
+  SavingsGoal,
+  Investment,
+  WalletTransaction,
+  Notification,
+  Achievement,
+  AIInsight,
+  CurrencyRate,
+  SystemActivity
 } from '@/types';
 
 // User Management
 export const createUserProfile = async (userId: string, userData: Partial<User>): Promise<void> => {
   const userRef = doc(db, 'users', userId);
+  const referralCode = generateReferralCode();
+  
   await setDoc(userRef, {
     ...userData,
+    walletBalances: { USD: 0 },
+    referralCode,
+    rewardPoints: 0,
+    streakCount: 0,
+    subscriptionPlan: 'free',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   }, { merge: true });
@@ -51,7 +63,13 @@ export const createUserProfile = async (userId: string, userData: Partial<User>)
 export const getUserProfile = async (userId: string): Promise<User | null> => {
   const userRef = doc(db, 'users', userId);
   const userSnap = await getDoc(userRef);
-  return userSnap.exists() ? { id: userSnap.id, ...userSnap.data() } as User : null;
+  return userSnap.exists() ? { 
+    id: userSnap.id, 
+    ...userSnap.data(),
+    createdAt: userSnap.data().createdAt?.toDate?.() || userSnap.data().createdAt,
+    updatedAt: userSnap.data().updatedAt?.toDate?.() || userSnap.data().updatedAt,
+    lastExpenseDate: userSnap.data().lastExpenseDate?.toDate?.() || userSnap.data().lastExpenseDate,
+  } as User : null;
 };
 
 export const updateUserProfile = async (userId: string, updates: Partial<User>): Promise<void> => {
@@ -62,7 +80,71 @@ export const updateUserProfile = async (userId: string, updates: Partial<User>):
   });
 };
 
-// Expense Management
+// Wallet Management
+export const addFundsToWallet = async (userId: string, amount: number, currency: string): Promise<void> => {
+  const userRef = doc(db, 'users', userId);
+  const walletField = `walletBalances.${currency}`;
+  
+  await updateDoc(userRef, {
+    [walletField]: increment(amount),
+    updatedAt: serverTimestamp()
+  });
+
+  // Record transaction
+  await addDoc(collection(db, 'walletTransactions'), {
+    fromUserId: 'system',
+    toUserId: userId,
+    amount,
+    currency,
+    type: 'add_funds',
+    description: `Added ${amount} ${currency} to wallet`,
+    status: 'completed',
+    createdAt: serverTimestamp()
+  });
+};
+
+export const transferFunds = async (
+  fromUserId: string, 
+  toUserId: string, 
+  amount: number, 
+  currency: string,
+  description: string,
+  splitId?: string
+): Promise<void> => {
+  const batch = writeBatch(db);
+  
+  // Update sender wallet
+  const fromUserRef = doc(db, 'users', fromUserId);
+  batch.update(fromUserRef, {
+    [`walletBalances.${currency}`]: increment(-amount),
+    updatedAt: serverTimestamp()
+  });
+  
+  // Update receiver wallet
+  const toUserRef = doc(db, 'users', toUserId);
+  batch.update(toUserRef, {
+    [`walletBalances.${currency}`]: increment(amount),
+    updatedAt: serverTimestamp()
+  });
+  
+  // Record transaction
+  const transactionRef = doc(collection(db, 'walletTransactions'));
+  batch.set(transactionRef, {
+    fromUserId,
+    toUserId,
+    amount,
+    currency,
+    type: 'transfer',
+    description,
+    splitId,
+    status: 'completed',
+    createdAt: serverTimestamp()
+  });
+  
+  await batch.commit();
+};
+
+// Expense Management with AI OCR
 export const addExpense = async (expense: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
   const expensesRef = collection(db, 'expenses');
   const docRef = await addDoc(expensesRef, {
@@ -71,7 +153,27 @@ export const addExpense = async (expense: Omit<Expense, 'id' | 'createdAt' | 'up
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });
+  
+  // Update user streak
+  await updateUserStreak(expense.userId);
+  
   return docRef.id;
+};
+
+export const processReceiptWithAI = async (imageUrl: string): Promise<any> => {
+  // Simulate AI OCR processing
+  // In real implementation, this would call Firebase Functions with Genkit
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve({
+        merchant: 'Sample Store',
+        amount: 25.99,
+        date: new Date().toISOString().split('T')[0],
+        category: 'Food & Dining',
+        confidence: 0.95
+      });
+    }, 2000);
+  });
 };
 
 export const getExpenses = async (userId: string, filters?: any): Promise<Expense[]> => {
@@ -84,22 +186,21 @@ export const getExpenses = async (userId: string, filters?: any): Promise<Expens
   if (filters?.category) {
     q = query(q, where('category', '==', filters.category));
   }
-
-  if (filters?.limit) {
-    q = query(q, limit(filters.limit));
-  }
-  
   if (filters?.groupId) {
     q = query(q, where('groupId', '==', filters.groupId));
+  }
+  if (filters?.limit) {
+    q = query(q, limit(filters.limit));
   }
 
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => ({ 
     id: doc.id, 
     ...doc.data(),
-    date: doc.data().date instanceof Timestamp ? doc.data().date.toDate() : new Date(doc.data().date),
-    createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt),
-    updatedAt: doc.data().updatedAt instanceof Timestamp ? doc.data().updatedAt.toDate() : new Date(doc.data().updatedAt),
+    date: doc.data().date?.toDate?.() || new Date(doc.data().date),
+    createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt),
+    updatedAt: doc.data().updatedAt?.toDate?.() || new Date(doc.data().updatedAt),
+    recurringEndDate: doc.data().recurringEndDate?.toDate?.() || doc.data().recurringEndDate,
   } as Expense));
 };
 
@@ -109,6 +210,9 @@ export const updateExpense = async (expenseId: string, updates: Partial<Expense>
   
   if (updates.date) {
     updateData.date = Timestamp.fromDate(new Date(updates.date));
+  }
+  if (updates.recurringEndDate) {
+    updateData.recurringEndDate = Timestamp.fromDate(new Date(updates.recurringEndDate));
   }
   
   await updateDoc(expenseRef, {
@@ -122,35 +226,15 @@ export const deleteExpense = async (expenseId: string): Promise<void> => {
   await deleteDoc(expenseRef);
 };
 
-// Expense Templates
-export const saveExpenseTemplate = async (template: Omit<ExpenseTemplate, 'id' | 'createdAt' | 'updatedAt'>) => {
-  const templatesRef = collection(db, 'expenseTemplates');
-  return await addDoc(templatesRef, {
-    ...template,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
+export const bulkDeleteExpenses = async (expenseIds: string[]): Promise<void> => {
+  const batch = writeBatch(db);
+  
+  expenseIds.forEach(id => {
+    const expenseRef = doc(db, 'expenses', id);
+    batch.delete(expenseRef);
   });
-};
-
-export const getExpenseTemplates = async (userId: string) => {
-  const q = query(
-    collection(db, 'expenseTemplates'),
-    where('userId', '==', userId),
-    orderBy('name', 'asc')
-  );
-
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ 
-    id: doc.id, 
-    ...doc.data(),
-    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
-    updatedAt: doc.data().updatedAt?.toDate?.() || doc.data().updatedAt,
-  } as ExpenseTemplate));
-};
-
-export const deleteExpenseTemplate = async (templateId: string) => {
-  const templateRef = doc(db, 'expenseTemplates', templateId);
-  await deleteDoc(templateRef);
+  
+  await batch.commit();
 };
 
 // Income Management
@@ -176,82 +260,29 @@ export const getIncome = async (userId: string): Promise<Income[]> => {
   return snapshot.docs.map(doc => ({ 
     id: doc.id, 
     ...doc.data(),
-    date: doc.data().date instanceof Timestamp ? doc.data().date.toDate() : new Date(doc.data().date),
-    createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt),
-    updatedAt: doc.data().updatedAt instanceof Timestamp ? doc.data().updatedAt.toDate() : new Date(doc.data().updatedAt),
+    date: doc.data().date?.toDate?.() || new Date(doc.data().date),
+    createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt),
+    updatedAt: doc.data().updatedAt?.toDate?.() || new Date(doc.data().updatedAt),
   } as Income));
 };
 
-export const updateIncome = async (incomeId: string, updates: Partial<Income>) => {
-  const incomeRef = doc(db, 'income', incomeId);
-  await updateDoc(incomeRef, {
-    ...updates,
-    updatedAt: serverTimestamp()
-  });
-};
-
-export const deleteIncome = async (incomeId: string) => {
-  const incomeRef = doc(db, 'income', incomeId);
-  await deleteDoc(incomeRef);
-};
-
-// Budget Management
+// Budget Management with AI Suggestions
 export const addBudget = async (budget: Omit<Budget, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
   const budgetRef = collection(db, 'budgets');
   const docRef = await addDoc(budgetRef, {
     ...budget,
+    startDate: budget.startDate ? Timestamp.fromDate(new Date(budget.startDate)) : null,
+    endDate: budget.endDate ? Timestamp.fromDate(new Date(budget.endDate)) : null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });
   return docRef.id;
 };
 
-export const getBudgets = async (userId: string, month?: string): Promise<Budget[]> => {
-  let q = query(
-    collection(db, 'budgets'),
-    where('userId', '==', userId)
-  );
-
-  if (month) {
-    q = query(q, where('month', '==', month));
-  }
-
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ 
-    id: doc.id, 
-    ...doc.data(),
-    createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt),
-    updatedAt: doc.data().updatedAt instanceof Timestamp ? doc.data().updatedAt.toDate() : new Date(doc.data().updatedAt),
-  } as Budget));
-};
-
-export const updateBudget = async (budgetId: string, updates: Partial<Budget>) => {
-  const budgetRef = doc(db, 'budgets', budgetId);
-  await updateDoc(budgetRef, {
-    ...updates,
-    updatedAt: serverTimestamp()
-  });
-};
-
-export const deleteBudget = async (budgetId: string) => {
-  const budgetRef = doc(db, 'budgets', budgetId);
-  await deleteDoc(budgetRef);
-};
-
-// Budget Alerts
-export const createBudgetAlert = async (alert: Omit<BudgetAlert, 'id' | 'createdAt'>) => {
-  const alertsRef = collection(db, 'budgetAlerts');
-  return await addDoc(alertsRef, {
-    ...alert,
-    createdAt: serverTimestamp()
-  });
-};
-
-export const getBudgetAlerts = async (userId: string) => {
+export const getBudgets = async (userId: string): Promise<Budget[]> => {
   const q = query(
-    collection(db, 'budgetAlerts'),
+    collection(db, 'budgets'),
     where('userId', '==', userId),
-    where('read', '==', false),
     orderBy('createdAt', 'desc')
   );
 
@@ -259,49 +290,269 @@ export const getBudgetAlerts = async (userId: string) => {
   return snapshot.docs.map(doc => ({ 
     id: doc.id, 
     ...doc.data(),
-    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
-  } as BudgetAlert));
+    startDate: doc.data().startDate?.toDate?.() || doc.data().startDate,
+    endDate: doc.data().endDate?.toDate?.() || doc.data().endDate,
+    createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt),
+    updatedAt: doc.data().updatedAt?.toDate?.() || new Date(doc.data().updatedAt),
+  } as Budget));
 };
 
-export const markBudgetAlertAsRead = async (alertId: string) => {
-  const alertRef = doc(db, 'budgetAlerts', alertId);
-  await updateDoc(alertRef, { read: true });
+export const generateAIBudgetSuggestions = async (userId: string): Promise<Budget[]> => {
+  // Simulate AI budget suggestions based on spending patterns
+  const expenses = await getExpenses(userId);
+  const categorySpending: { [key: string]: number[] } = {};
+  
+  expenses.forEach(expense => {
+    if (!categorySpending[expense.category]) {
+      categorySpending[expense.category] = [];
+    }
+    categorySpending[expense.category].push(expense.amount);
+  });
+  
+  const suggestions: Omit<Budget, 'id' | 'createdAt' | 'updatedAt'>[] = [];
+  
+  Object.entries(categorySpending).forEach(([category, amounts]) => {
+    const avgSpending = amounts.reduce((sum, amt) => sum + amt, 0) / amounts.length;
+    const suggestedAmount = Math.ceil(avgSpending * 1.1); // 10% buffer
+    
+    suggestions.push({
+      userId,
+      category,
+      amount: suggestedAmount,
+      currency: 'USD',
+      period: 'monthly',
+      aiSuggested: true
+    });
+  });
+  
+  return suggestions;
 };
 
-// Spending Insights
-export const createSpendingInsight = async (insight: Omit<SpendingInsight, 'id' | 'createdAt'>) => {
-  const insightsRef = collection(db, 'spendingInsights');
-  return await addDoc(insightsRef, {
-    ...insight,
-    createdAt: serverTimestamp()
+// Savings Goals
+export const createSavingsGoal = async (goal: Omit<SavingsGoal, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
+  const goalRef = collection(db, 'savingsGoals');
+  const docRef = await addDoc(goalRef, {
+    ...goal,
+    targetDate: goal.targetDate ? Timestamp.fromDate(new Date(goal.targetDate)) : null,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  });
+  return docRef.id;
+};
+
+export const getSavingsGoals = async (userId: string, groupId?: string): Promise<SavingsGoal[]> => {
+  let q = query(
+    collection(db, 'savingsGoals'),
+    where('userId', '==', userId),
+    orderBy('createdAt', 'desc')
+  );
+  
+  if (groupId) {
+    q = query(q, where('groupId', '==', groupId));
+  }
+
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ 
+    id: doc.id, 
+    ...doc.data(),
+    targetDate: doc.data().targetDate?.toDate?.() || doc.data().targetDate,
+    createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt),
+    updatedAt: doc.data().updatedAt?.toDate?.() || new Date(doc.data().updatedAt),
+    contributions: doc.data().contributions?.map((contrib: any) => ({
+      ...contrib,
+      date: contrib.date?.toDate?.() || contrib.date
+    })) || []
+  } as SavingsGoal));
+};
+
+export const contributeToGoal = async (goalId: string, contribution: {
+  userId: string;
+  userName: string;
+  amount: number;
+}): Promise<void> => {
+  const goalRef = doc(db, 'savingsGoals', goalId);
+  
+  await updateDoc(goalRef, {
+    currentAmount: increment(contribution.amount),
+    contributions: arrayUnion({
+      ...contribution,
+      date: serverTimestamp()
+    }),
+    updatedAt: serverTimestamp()
   });
 };
 
-export const getSpendingInsights = async (userId: string) => {
+// Investment & Asset Tracking
+export const addInvestment = async (investment: Omit<Investment, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
+  const investmentRef = collection(db, 'investments');
+  const docRef = await addDoc(investmentRef, {
+    ...investment,
+    purchaseDate: Timestamp.fromDate(new Date(investment.purchaseDate)),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  });
+  return docRef.id;
+};
+
+export const getInvestments = async (userId: string): Promise<Investment[]> => {
   const q = query(
-    collection(db, 'spendingInsights'),
+    collection(db, 'investments'),
     where('userId', '==', userId),
-    orderBy('priority', 'desc'),
-    orderBy('createdAt', 'desc'),
-    limit(10)
+    orderBy('purchaseDate', 'desc')
   );
 
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => ({ 
     id: doc.id, 
     ...doc.data(),
-    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
-  } as SpendingInsight));
+    purchaseDate: doc.data().purchaseDate?.toDate?.() || new Date(doc.data().purchaseDate),
+    createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt),
+    updatedAt: doc.data().updatedAt?.toDate?.() || new Date(doc.data().updatedAt),
+  } as Investment));
 };
 
-export const markInsightAsRead = async (insightId: string) => {
-  const insightRef = doc(db, 'spendingInsights', insightId);
-  await updateDoc(insightRef, { read: true });
+export const calculateNetWorth = async (userId: string): Promise<{ [currency: string]: number }> => {
+  const [user, investments] = await Promise.all([
+    getUserProfile(userId),
+    getInvestments(userId)
+  ]);
+  
+  const netWorth: { [currency: string]: number } = { ...user?.walletBalances || {} };
+  
+  investments.forEach(investment => {
+    const currentValue = investment.quantity * investment.currentPrice;
+    netWorth[investment.currency] = (netWorth[investment.currency] || 0) + currentValue;
+  });
+  
+  return netWorth;
+};
+
+// Split Expenses with Advanced Settlement
+export const createSplit = async (split: Omit<Split, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
+  const splitRef = collection(db, 'splits');
+  const docRef = await addDoc(splitRef, {
+    ...split,
+    status: 'unsettled',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  });
+  return docRef.id;
+};
+
+export const getSplits = async (userId: string): Promise<Split[]> => {
+  // Get splits where user is creator or participant
+  const creatorQuery = query(
+    collection(db, 'splits'),
+    where('creatorId', '==', userId),
+    orderBy('createdAt', 'desc')
+  );
+
+  const creatorSnapshot = await getDocs(creatorQuery);
+  const creatorSplits = creatorSnapshot.docs.map(doc => ({ 
+    id: doc.id, 
+    ...doc.data(),
+    createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt),
+    updatedAt: doc.data().updatedAt?.toDate?.() || new Date(doc.data().updatedAt),
+  } as Split));
+
+  // Get all splits and filter by participant
+  const allSplitsQuery = query(collection(db, 'splits'));
+  const allSplitsSnapshot = await getDocs(allSplitsQuery);
+  const participantSplits = allSplitsSnapshot.docs
+    .map(doc => ({ 
+      id: doc.id, 
+      ...doc.data(),
+      createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt),
+      updatedAt: doc.data().updatedAt?.toDate?.() || new Date(doc.data().updatedAt),
+    } as Split))
+    .filter(split => split.participants.some(p => p.userId === userId) && split.creatorId !== userId);
+
+  const allSplits = [...creatorSplits, ...participantSplits];
+  return allSplits.filter((split, index, self) => 
+    index === self.findIndex(s => s.id === split.id)
+  ).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+};
+
+export const createSettlementRequest = async (request: Omit<SettlementRequest, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
+  const requestRef = collection(db, 'settlementRequests');
+  const docRef = await addDoc(requestRef, {
+    ...request,
+    status: 'pending',
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  });
+  
+  // Create notification for the payer
+  await createNotification({
+    userId: request.toUserId,
+    type: 'settlement_request',
+    title: 'Settlement Request',
+    message: `You have a new settlement request for ${request.amount} ${request.currency}`,
+    data: { settlementRequestId: docRef.id }
+  });
+  
+  return docRef.id;
+};
+
+export const approveSettlementRequest = async (requestId: string): Promise<void> => {
+  const requestRef = doc(db, 'settlementRequests', requestId);
+  const requestSnap = await getDoc(requestRef);
+  
+  if (!requestSnap.exists()) return;
+  
+  const request = requestSnap.data() as SettlementRequest;
+  
+  await updateDoc(requestRef, {
+    status: 'approved',
+    updatedAt: serverTimestamp()
+  });
+  
+  // Update split status
+  const splitRef = doc(db, 'splits', request.splitId);
+  const splitSnap = await getDoc(splitRef);
+  
+  if (splitSnap.exists()) {
+    const split = splitSnap.data() as Split;
+    const updatedParticipants = split.participants.map(p =>
+      p.userId === request.fromUserId ? { ...p, settled: true } : p
+    );
+    
+    const allSettled = updatedParticipants.every(p => p.settled);
+    
+    await updateDoc(splitRef, {
+      participants: updatedParticipants,
+      status: allSettled ? 'settled' : 'pending',
+      updatedAt: serverTimestamp()
+    });
+  }
+};
+
+export const settleViaWallet = async (splitId: string, fromUserId: string, toUserId: string, amount: number, currency: string): Promise<void> => {
+  // Transfer funds
+  await transferFunds(fromUserId, toUserId, amount, currency, 'Split settlement', splitId);
+  
+  // Update split status
+  const splitRef = doc(db, 'splits', splitId);
+  const splitSnap = await getDoc(splitRef);
+  
+  if (splitSnap.exists()) {
+    const split = splitSnap.data() as Split;
+    const updatedParticipants = split.participants.map(p =>
+      p.userId === fromUserId ? { ...p, paid: true, settled: true, paymentMethod: 'wallet' } : p
+    );
+    
+    const allSettled = updatedParticipants.every(p => p.settled);
+    
+    await updateDoc(splitRef, {
+      participants: updatedParticipants,
+      status: allSettled ? 'settled' : 'pending',
+      updatedAt: serverTimestamp()
+    });
+  }
 };
 
 // Friend Management
 export const sendFriendRequest = async (fromUserId: string, toEmail: string): Promise<string> => {
-  // Get sender's profile information
   const senderProfile = await getUserProfile(fromUserId);
   if (!senderProfile) {
     throw new Error('Sender profile not found');
@@ -316,10 +567,11 @@ export const sendFriendRequest = async (fromUserId: string, toEmail: string): Pr
     status: 'pending',
     createdAt: serverTimestamp()
   });
+  
   return docRef.id;
 };
 
-export const getFriendRequests = async (userEmail: string): Promise<any[]> => {
+export const getFriendRequests = async (userEmail: string): Promise<FriendRequest[]> => {
   const q = query(
     collection(db, 'friendRequests'),
     where('toEmail', '==', userEmail),
@@ -331,7 +583,7 @@ export const getFriendRequests = async (userEmail: string): Promise<any[]> => {
     id: doc.id, 
     ...doc.data(),
     createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
-  }));
+  } as FriendRequest));
 };
 
 export const acceptFriendRequest = async (requestId: string, fromUserId: string, toUserId: string): Promise<void> => {
@@ -346,6 +598,7 @@ export const acceptFriendRequest = async (requestId: string, fromUserId: string,
   batch.set(friendship1Ref, {
     userId: fromUserId,
     friendId: toUserId,
+    status: 'accepted',
     createdAt: serverTimestamp()
   });
 
@@ -353,44 +606,38 @@ export const acceptFriendRequest = async (requestId: string, fromUserId: string,
   batch.set(friendship2Ref, {
     userId: toUserId,
     friendId: fromUserId,
+    status: 'accepted',
     createdAt: serverTimestamp()
   });
 
   await batch.commit();
 };
 
-export const getFriends = async (userId: string): Promise<any[]> => {
+export const getFriends = async (userId: string): Promise<Friend[]> => {
   const q = query(
     collection(db, 'friends'),
-    where('userId', '==', userId)
+    where('userId', '==', userId),
+    where('status', '==', 'accepted')
   );
 
   const snapshot = await getDocs(q);
-  const friendsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  
-  // Get friend details for each friend
-  const friendsWithDetails = await Promise.all(
-    friendsData.map(async (friend) => {
-      const friendProfile = await getUserProfile(friend.friendId);
-      return {
-        ...friend,
-        displayName: friendProfile?.displayName,
-        email: friendProfile?.email,
-      };
-    })
-  );
-  
-  return friendsWithDetails;
+  return snapshot.docs.map(doc => ({ 
+    id: doc.id, 
+    ...doc.data(),
+    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
+  } as Friend));
 };
 
-// Group Management
+// Group Management (Enhanced)
 export const createGroup = async (group: Omit<Group, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
   const creatorProfile = await getUserProfile(group.creatorId);
+  const inviteCode = generateInviteCode();
   
   const groupRef = collection(db, 'groups');
   const docRef = await addDoc(groupRef, {
     ...group,
-    admins: [group.creatorId], // Creator is automatically an admin
+    admins: [group.creatorId],
+    inviteCode,
     memberDetails: [{
       userId: group.creatorId,
       displayName: creatorProfile?.displayName || 'Creator',
@@ -408,12 +655,11 @@ export const createGroup = async (group: Omit<Group, 'id' | 'createdAt' | 'updat
     updatedAt: serverTimestamp()
   });
   
-  // Add initial activity log
   await addGroupActivity({
     groupId: docRef.id,
     userId: group.creatorId,
     userName: creatorProfile?.displayName || 'Creator',
-    type: 'group_created',
+    type: 'group_updated',
     description: `Created group "${group.name}"`,
   });
   
@@ -430,20 +676,36 @@ export const getGroups = async (userId: string): Promise<Group[]> => {
   return snapshot.docs.map(doc => ({ 
     id: doc.id, 
     ...doc.data(),
-    createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt),
-    updatedAt: doc.data().updatedAt instanceof Timestamp ? doc.data().updatedAt.toDate() : new Date(doc.data().updatedAt),
+    createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt),
+    updatedAt: doc.data().updatedAt?.toDate?.() || new Date(doc.data().updatedAt),
     memberDetails: doc.data().memberDetails?.map((member: any) => ({
       ...member,
-      joinedAt: member.joinedAt instanceof Timestamp ? member.joinedAt.toDate() : new Date(member.joinedAt)
+      joinedAt: member.joinedAt?.toDate?.() || new Date(member.joinedAt)
     })) || []
   } as Group));
 };
 
-export const addGroupMember = async (groupId: string, userId: string) => {
-  const userProfile = await getUserProfile(userId);
-  const groupRef = doc(db, 'groups', groupId);
+export const joinGroupByInviteCode = async (inviteCode: string, userId: string): Promise<void> => {
+  const q = query(
+    collection(db, 'groups'),
+    where('inviteCode', '==', inviteCode)
+  );
   
-  await updateDoc(groupRef, {
+  const snapshot = await getDocs(q);
+  if (snapshot.empty) {
+    throw new Error('Invalid invite code');
+  }
+  
+  const groupDoc = snapshot.docs[0];
+  const group = groupDoc.data() as Group;
+  
+  if (group.members.includes(userId)) {
+    throw new Error('Already a member of this group');
+  }
+  
+  const userProfile = await getUserProfile(userId);
+  
+  await updateDoc(groupDoc.ref, {
     members: arrayUnion(userId),
     memberDetails: arrayUnion({
       userId,
@@ -454,208 +716,14 @@ export const addGroupMember = async (groupId: string, userId: string) => {
     }),
     updatedAt: serverTimestamp()
   });
-};
-
-export const removeGroupMember = async (groupId: string, userId: string) => {
-  const groupRef = doc(db, 'groups', groupId);
-  const groupSnap = await getDoc(groupRef);
   
-  if (groupSnap.exists()) {
-    const groupData = groupSnap.data() as Group;
-    const memberToRemove = groupData.memberDetails?.find(m => m.userId === userId);
-    
-    await updateDoc(groupRef, {
-      members: arrayRemove(userId),
-      admins: arrayRemove(userId),
-      memberDetails: arrayRemove(memberToRemove),
-      updatedAt: serverTimestamp()
-    });
-  }
-};
-
-export const updateGroup = async (groupId: string, updates: Partial<Group>) => {
-  const groupRef = doc(db, 'groups', groupId);
-  await updateDoc(groupRef, {
-    ...updates,
-    updatedAt: serverTimestamp()
-  });
-};
-
-export const promoteToAdmin = async (groupId: string, userId: string, promotedBy: string) => {
-  const groupRef = doc(db, 'groups', groupId);
-  const groupSnap = await getDoc(groupRef);
-  
-  if (groupSnap.exists()) {
-    const groupData = groupSnap.data() as Group;
-    const updatedMemberDetails = groupData.memberDetails?.map(member => 
-      member.userId === userId ? { ...member, role: 'admin' } : member
-    ) || [];
-    
-    await updateDoc(groupRef, {
-      admins: arrayUnion(userId),
-      memberDetails: updatedMemberDetails,
-      updatedAt: serverTimestamp()
-    });
-    
-    const promotedUser = await getUserProfile(userId);
-    await addGroupActivity({
-      groupId,
-      userId: promotedBy,
-      userName: 'Admin',
-      type: 'member_promoted',
-      description: `Promoted ${promotedUser?.displayName || 'member'} to admin`,
-      metadata: { promotedUserId: userId }
-    });
-  }
-};
-
-export const demoteFromAdmin = async (groupId: string, userId: string, demotedBy: string) => {
-  const groupRef = doc(db, 'groups', groupId);
-  const groupSnap = await getDoc(groupRef);
-  
-  if (groupSnap.exists()) {
-    const groupData = groupSnap.data() as Group;
-    const updatedMemberDetails = groupData.memberDetails?.map(member => 
-      member.userId === userId ? { ...member, role: 'member' } : member
-    ) || [];
-    
-    await updateDoc(groupRef, {
-      admins: arrayRemove(userId),
-      memberDetails: updatedMemberDetails,
-      updatedAt: serverTimestamp()
-    });
-    
-    const demotedUser = await getUserProfile(userId);
-    await addGroupActivity({
-      groupId,
-      userId: demotedBy,
-      userName: 'Creator',
-      type: 'member_demoted',
-      description: `Demoted ${demotedUser?.displayName || 'admin'} to member`,
-      metadata: { demotedUserId: userId }
-    });
-  }
-};
-
-export const transferGroupOwnership = async (groupId: string, newOwnerId: string, currentOwnerId: string) => {
-  const groupRef = doc(db, 'groups', groupId);
-  const groupSnap = await getDoc(groupRef);
-  
-  if (groupSnap.exists()) {
-    const groupData = groupSnap.data() as Group;
-    const updatedMemberDetails = groupData.memberDetails?.map(member => {
-      if (member.userId === newOwnerId) {
-        return { ...member, role: 'creator' };
-      } else if (member.userId === currentOwnerId) {
-        return { ...member, role: 'admin' };
-      }
-      return member;
-    }) || [];
-    
-    await updateDoc(groupRef, {
-      creatorId: newOwnerId,
-      admins: arrayUnion(currentOwnerId),
-      memberDetails: updatedMemberDetails,
-      updatedAt: serverTimestamp()
-    });
-    
-    const newOwner = await getUserProfile(newOwnerId);
-    await addGroupActivity({
-      groupId,
-      userId: currentOwnerId,
-      userName: 'Former Owner',
-      type: 'ownership_transferred',
-      description: `Transferred group ownership to ${newOwner?.displayName || 'member'}`,
-      metadata: { newOwnerId }
-    });
-  }
-};
-
-export const leaveGroup = async (groupId: string, userId: string, userName: string) => {
-  const groupRef = doc(db, 'groups', groupId);
-  const groupSnap = await getDoc(groupRef);
-  
-  if (groupSnap.exists()) {
-    const groupData = groupSnap.data() as Group;
-    const memberToRemove = groupData.memberDetails?.find(m => m.userId === userId);
-    
-    await updateDoc(groupRef, {
-      members: arrayRemove(userId),
-      admins: arrayRemove(userId),
-      memberDetails: arrayRemove(memberToRemove),
-      updatedAt: serverTimestamp()
-    });
-    
-    await addGroupActivity({
-      groupId,
-      userId,
-      userName,
-      type: 'member_left',
-      description: `Left the group`,
-    });
-  }
-};
-
-// Group Invitations
-export const createGroupInvitation = async (invitation: Omit<GroupInvitation, 'id' | 'createdAt'>): Promise<string> => {
-  const invitationRef = collection(db, 'groupInvitations');
-  const docRef = await addDoc(invitationRef, {
-    ...invitation,
-    expiresAt: Timestamp.fromDate(new Date(invitation.expiresAt)),
-    createdAt: serverTimestamp()
-  });
-  return docRef.id;
-};
-
-export const getGroupInvitations = async (email: string): Promise<GroupInvitation[]> => {
-  const q = query(
-    collection(db, 'groupInvitations'),
-    where('invitedEmail', '==', email),
-    where('status', '==', 'pending'),
-    orderBy('createdAt', 'desc')
-  );
-
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ 
-    id: doc.id, 
-    ...doc.data(),
-    expiresAt: doc.data().expiresAt?.toDate?.() || doc.data().expiresAt,
-    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
-  } as GroupInvitation));
-};
-
-export const acceptGroupInvitation = async (invitationId: string, userId: string, userName: string) => {
-  const invitationRef = doc(db, 'groupInvitations', invitationId);
-  const invitationSnap = await getDoc(invitationRef);
-  
-  if (!invitationSnap.exists()) {
-    throw new Error('Invitation not found');
-  }
-  
-  const invitation = invitationSnap.data() as GroupInvitation;
-  const batch = writeBatch(db);
-  
-  // Update invitation status
-  batch.update(invitationRef, { status: 'accepted' });
-  
-  // Add user to group
-  await addGroupMember(invitation.groupId, userId);
-  
-  await batch.commit();
-  
-  // Add activity log
   await addGroupActivity({
-    groupId: invitation.groupId,
+    groupId: groupDoc.id,
     userId,
-    userName,
+    userName: userProfile?.displayName || 'Member',
     type: 'member_joined',
-    description: `Joined the group`,
+    description: 'Joined the group via invite link',
   });
-};
-
-export const declineGroupInvitation = async (invitationId: string) => {
-  const invitationRef = doc(db, 'groupInvitations', invitationId);
-  await updateDoc(invitationRef, { status: 'declined' });
 };
 
 // Group Activity Log
@@ -683,140 +751,7 @@ export const getGroupActivities = async (groupId: string): Promise<GroupActivity
   } as GroupActivity));
 };
 
-// Group Savings Goals
-export const createSavingsGoal = async (goal: Omit<GroupSavingsGoal, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
-  const goalRef = collection(db, 'groupSavingsGoals');
-  const docRef = await addDoc(goalRef, {
-    ...goal,
-    targetDate: goal.targetDate ? Timestamp.fromDate(new Date(goal.targetDate)) : null,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
-  });
-  
-  const creator = await getUserProfile(goal.createdBy);
-  await addGroupActivity({
-    groupId: goal.groupId,
-    userId: goal.createdBy,
-    userName: creator?.displayName || 'Member',
-    type: 'goal_created',
-    description: `Created savings goal "${goal.name}"`,
-    metadata: { goalId: docRef.id, targetAmount: goal.targetAmount }
-  });
-  
-  return docRef.id;
-};
-
-export const getGroupSavingsGoals = async (groupId: string): Promise<GroupSavingsGoal[]> => {
-  const q = query(
-    collection(db, 'groupSavingsGoals'),
-    where('groupId', '==', groupId),
-    orderBy('createdAt', 'desc')
-  );
-
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ 
-    id: doc.id, 
-    ...doc.data(),
-    targetDate: doc.data().targetDate?.toDate?.() || doc.data().targetDate,
-    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
-    updatedAt: doc.data().updatedAt?.toDate?.() || doc.data().updatedAt,
-    contributions: doc.data().contributions?.map((contrib: any) => ({
-      ...contrib,
-      date: contrib.date?.toDate?.() || contrib.date
-    })) || []
-  } as GroupSavingsGoal));
-};
-
-export const contributeToSavingsGoal = async (goalId: string, contribution: {
-  userId: string;
-  userName: string;
-  amount: number;
-}) => {
-  const goalRef = doc(db, 'groupSavingsGoals', goalId);
-  const goalSnap = await getDoc(goalRef);
-  
-  if (!goalSnap.exists()) {
-    throw new Error('Savings goal not found');
-  }
-  
-  const goal = goalSnap.data() as GroupSavingsGoal;
-  
-  await updateDoc(goalRef, {
-    currentAmount: increment(contribution.amount),
-    contributions: arrayUnion({
-      ...contribution,
-      date: serverTimestamp()
-    }),
-    updatedAt: serverTimestamp()
-  });
-  
-  await addGroupActivity({
-    groupId: goal.groupId,
-    userId: contribution.userId,
-    userName: contribution.userName,
-    type: 'goal_contribution',
-    description: `Contributed $${contribution.amount} to "${goal.name}"`,
-    metadata: { goalId, amount: contribution.amount }
-  });
-};
-
-// Split Management
-export const createSplit = async (split: Omit<Split, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
-  const splitRef = collection(db, 'splits');
-  const docRef = await addDoc(splitRef, {
-    ...split,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp()
-  });
-  return docRef.id;
-};
-
-export const getSplits = async (userId: string): Promise<Split[]> => {
-  // Get splits where user is creator or participant
-  const creatorQuery = query(
-    collection(db, 'splits'),
-    where('creatorId', '==', userId),
-    orderBy('createdAt', 'desc')
-  );
-
-  const creatorSnapshot = await getDocs(creatorQuery);
-  const creatorSplits = creatorSnapshot.docs.map(doc => ({ 
-    id: doc.id, 
-    ...doc.data(),
-    createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt),
-    updatedAt: doc.data().updatedAt instanceof Timestamp ? doc.data().updatedAt.toDate() : new Date(doc.data().updatedAt),
-  } as Split));
-
-  // Get all splits and filter by participant
-  const allSplitsQuery = query(collection(db, 'splits'));
-  const allSplitsSnapshot = await getDocs(allSplitsQuery);
-  const participantSplits = allSplitsSnapshot.docs
-    .map(doc => ({ 
-      id: doc.id, 
-      ...doc.data(),
-      createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt),
-      updatedAt: doc.data().updatedAt instanceof Timestamp ? doc.data().updatedAt.toDate() : new Date(doc.data().updatedAt),
-    } as Split))
-    .filter(split => split.participants.some(p => p.userId === userId) && split.creatorId !== userId);
-
-  // Combine and deduplicate
-  const allSplits = [...creatorSplits, ...participantSplits];
-  const uniqueSplits = allSplits.filter((split, index, self) => 
-    index === self.findIndex(s => s.id === split.id)
-  );
-
-  return uniqueSplits.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-};
-
-export const updateSplit = async (splitId: string, updates: Partial<Split>): Promise<void> => {
-  const splitRef = doc(db, 'splits', splitId);
-  await updateDoc(splitRef, {
-    ...updates,
-    updatedAt: serverTimestamp()
-  });
-};
-
-// Reminder Management
+// Reminders & Financial Calendar
 export const addReminder = async (reminder: Omit<Reminder, 'id' | 'createdAt' | 'updatedAt'>) => {
   const reminderRef = collection(db, 'reminders');
   return await addDoc(reminderRef, {
@@ -844,72 +779,350 @@ export const getReminders = async (userId: string) => {
   } as Reminder));
 };
 
-export const updateReminder = async (reminderId: string, updates: Partial<Reminder>) => {
-  const reminderRef = doc(db, 'reminders', reminderId);
-  const updateData = { ...updates };
+export const getFinancialCalendarEvents = async (userId: string, startDate: Date, endDate: Date) => {
+  // Get reminders in date range
+  const remindersQuery = query(
+    collection(db, 'reminders'),
+    where('userId', '==', userId),
+    where('dueDate', '>=', Timestamp.fromDate(startDate)),
+    where('dueDate', '<=', Timestamp.fromDate(endDate))
+  );
   
-  if (updates.dueDate) {
-    updateData.dueDate = Timestamp.fromDate(new Date(updates.dueDate));
+  // Get recurring expenses
+  const recurringExpensesQuery = query(
+    collection(db, 'expenses'),
+    where('userId', '==', userId),
+    where('isRecurring', '==', true)
+  );
+  
+  const [remindersSnapshot, expensesSnapshot] = await Promise.all([
+    getDocs(remindersQuery),
+    getDocs(recurringExpensesQuery)
+  ]);
+  
+  const events = [];
+  
+  // Add reminders
+  remindersSnapshot.docs.forEach(doc => {
+    const reminder = { id: doc.id, ...doc.data() } as Reminder;
+    events.push({
+      id: reminder.id,
+      type: 'reminder',
+      title: reminder.title,
+      date: reminder.dueDate,
+      amount: reminder.amount,
+      currency: reminder.currency,
+      category: reminder.category
+    });
+  });
+  
+  // Project recurring expenses
+  expensesSnapshot.docs.forEach(doc => {
+    const expense = { id: doc.id, ...doc.data() } as Expense;
+    const projectedDates = calculateRecurringDates(expense, startDate, endDate);
+    
+    projectedDates.forEach(date => {
+      events.push({
+        id: `${expense.id}-${date.getTime()}`,
+        type: 'recurring_expense',
+        title: expense.description,
+        date,
+        amount: expense.amount,
+        currency: expense.currency,
+        category: expense.category
+      });
+    });
+  });
+  
+  return events.sort((a, b) => a.date.getTime() - b.date.getTime());
+};
+
+// Notifications
+export const createNotification = async (notification: Omit<Notification, 'id' | 'createdAt'>) => {
+  const notificationRef = collection(db, 'notifications');
+  return await addDoc(notificationRef, {
+    ...notification,
+    read: false,
+    createdAt: serverTimestamp()
+  });
+};
+
+export const getNotifications = async (userId: string) => {
+  const q = query(
+    collection(db, 'notifications'),
+    where('userId', '==', userId),
+    orderBy('createdAt', 'desc'),
+    limit(50)
+  );
+
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ 
+    id: doc.id, 
+    ...doc.data(),
+    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
+  } as Notification));
+};
+
+export const markNotificationAsRead = async (notificationId: string) => {
+  const notificationRef = doc(db, 'notifications', notificationId);
+  await updateDoc(notificationRef, { read: true });
+};
+
+// Achievements & Gamification
+export const unlockAchievement = async (userId: string, type: string, title: string, description: string, rewardPoints: number) => {
+  // Check if achievement already exists
+  const existingQuery = query(
+    collection(db, 'achievements'),
+    where('userId', '==', userId),
+    where('type', '==', type)
+  );
+  
+  const existingSnapshot = await getDocs(existingQuery);
+  if (!existingSnapshot.empty) return; // Already unlocked
+  
+  const achievementRef = collection(db, 'achievements');
+  await addDoc(achievementRef, {
+    userId,
+    type,
+    title,
+    description,
+    rewardPoints,
+    unlockedAt: serverTimestamp()
+  });
+  
+  // Award points to user
+  const userRef = doc(db, 'users', userId);
+  await updateDoc(userRef, {
+    rewardPoints: increment(rewardPoints)
+  });
+  
+  // Create notification
+  await createNotification({
+    userId,
+    type: 'achievement',
+    title: 'Achievement Unlocked!',
+    message: `You earned "${title}" and ${rewardPoints} points!`,
+    data: { achievementType: type }
+  });
+};
+
+export const getUserAchievements = async (userId: string) => {
+  const q = query(
+    collection(db, 'achievements'),
+    where('userId', '==', userId),
+    orderBy('unlockedAt', 'desc')
+  );
+
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ 
+    id: doc.id, 
+    ...doc.data(),
+    unlockedAt: doc.data().unlockedAt?.toDate?.() || doc.data().unlockedAt,
+  } as Achievement));
+};
+
+// Referral System
+export const processReferral = async (referralCode: string, newUserId: string) => {
+  // Find referrer
+  const referrerQuery = query(
+    collection(db, 'users'),
+    where('referralCode', '==', referralCode)
+  );
+  
+  const referrerSnapshot = await getDocs(referrerQuery);
+  if (referrerSnapshot.empty) return;
+  
+  const referrerId = referrerSnapshot.docs[0].id;
+  
+  // Create referral reward
+  const rewardRef = collection(db, 'referralRewards');
+  await addDoc(rewardRef, {
+    referrerId,
+    referredUserId: newUserId,
+    rewardPoints: 100, // 100 points for successful referral
+    status: 'awarded',
+    createdAt: serverTimestamp()
+  });
+  
+  // Award points to both users
+  const batch = writeBatch(db);
+  
+  const referrerRef = doc(db, 'users', referrerId);
+  batch.update(referrerRef, {
+    rewardPoints: increment(100)
+  });
+  
+  const newUserRef = doc(db, 'users', newUserId);
+  batch.update(newUserRef, {
+    rewardPoints: increment(50),
+    referredBy: referrerId
+  });
+  
+  await batch.commit();
+  
+  // Unlock achievements
+  await unlockAchievement(referrerId, 'referral', 'Referral Master', 'Successfully referred a friend', 100);
+};
+
+// AI Insights
+export const generateAIInsights = async (userId: string) => {
+  const expenses = await getExpenses(userId);
+  const insights = [];
+  
+  // Spending anomaly detection
+  const monthlySpending = calculateMonthlySpending(expenses);
+  const avgMonthlySpending = monthlySpending.reduce((sum, amt) => sum + amt, 0) / monthlySpending.length;
+  const currentMonthSpending = monthlySpending[monthlySpending.length - 1];
+  
+  if (currentMonthSpending > avgMonthlySpending * 1.5) {
+    insights.push({
+      userId,
+      type: 'anomaly_detection',
+      title: 'Unusual Spending Detected',
+      description: `Your spending this month is ${Math.round(((currentMonthSpending / avgMonthlySpending) - 1) * 100)}% higher than usual`,
+      priority: 'high',
+      read: false
+    });
   }
   
-  await updateDoc(reminderRef, {
-    ...updateData,
+  // Save insights
+  for (const insight of insights) {
+    await addDoc(collection(db, 'aiInsights'), {
+      ...insight,
+      createdAt: serverTimestamp()
+    });
+  }
+  
+  return insights;
+};
+
+// Currency Conversion
+export const getCurrencyRates = async (): Promise<CurrencyRate[]> => {
+  const q = query(collection(db, 'currencyRates'));
+  const snapshot = await getDocs(q);
+  
+  return snapshot.docs.map(doc => ({ 
+    id: doc.id, 
+    ...doc.data(),
+    lastUpdated: doc.data().lastUpdated?.toDate?.() || doc.data().lastUpdated,
+  } as CurrencyRate));
+};
+
+export const convertCurrency = async (amount: number, fromCurrency: string, toCurrency: string): Promise<number> => {
+  if (fromCurrency === toCurrency) return amount;
+  
+  const rates = await getCurrencyRates();
+  const rate = rates.find(r => r.fromCurrency === fromCurrency && r.toCurrency === toCurrency);
+  
+  if (!rate) {
+    // Fallback to USD conversion
+    const toUsdRate = rates.find(r => r.fromCurrency === fromCurrency && r.toCurrency === 'USD');
+    const fromUsdRate = rates.find(r => r.fromCurrency === 'USD' && r.toCurrency === toCurrency);
+    
+    if (toUsdRate && fromUsdRate) {
+      return amount * toUsdRate.rate * fromUsdRate.rate;
+    }
+    
+    return amount; // No conversion available
+  }
+  
+  return amount * rate.rate;
+};
+
+// Utility Functions
+const generateReferralCode = (): string => {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
+};
+
+const generateInviteCode = (): string => {
+  return Math.random().toString(36).substring(2, 15);
+};
+
+const updateUserStreak = async (userId: string) => {
+  const userRef = doc(db, 'users', userId);
+  const userSnap = await getDoc(userRef);
+  
+  if (!userSnap.exists()) return;
+  
+  const user = userSnap.data() as User;
+  const today = new Date();
+  const lastExpenseDate = user.lastExpenseDate ? new Date(user.lastExpenseDate) : null;
+  
+  let newStreakCount = user.streakCount || 0;
+  
+  if (lastExpenseDate) {
+    const daysDiff = Math.floor((today.getTime() - lastExpenseDate.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (daysDiff === 1) {
+      // Consecutive day
+      newStreakCount += 1;
+    } else if (daysDiff > 1) {
+      // Streak broken
+      newStreakCount = 1;
+    }
+    // Same day = no change
+  } else {
+    newStreakCount = 1;
+  }
+  
+  await updateDoc(userRef, {
+    streakCount: newStreakCount,
+    lastExpenseDate: Timestamp.fromDate(today),
     updatedAt: serverTimestamp()
   });
+  
+  // Check for streak achievements
+  if (newStreakCount === 7) {
+    await unlockAchievement(userId, 'streak_7', '7-Day Streak', 'Logged expenses for 7 consecutive days', 50);
+  } else if (newStreakCount === 30) {
+    await unlockAchievement(userId, 'streak_30', '30-Day Streak', 'Logged expenses for 30 consecutive days', 200);
+  }
 };
 
-export const deleteReminder = async (reminderId: string) => {
-  const reminderRef = doc(db, 'reminders', reminderId);
-  await deleteDoc(reminderRef);
-};
-
-// Data Export
-export const generateExportData = async (userId: string, dateFrom: Date, dateTo: Date): Promise<ExportData> => {
-  const [expenses, income, budgets] = await Promise.all([
-    getExpenses(userId),
-    getIncome(userId),
-    getBudgets(userId)
-  ]);
-
-  // Filter by date range
-  const filteredExpenses = expenses.filter(expense => {
-    const expenseDate = new Date(expense.date);
-    return expenseDate >= dateFrom && expenseDate <= dateTo;
-  });
-
-  const filteredIncome = income.filter(inc => {
-    const incomeDate = new Date(inc.date);
-    return incomeDate >= dateFrom && incomeDate <= dateTo;
-  });
-
-  // Calculate summary
-  const totalExpenses = filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-  const totalIncome = filteredIncome.reduce((sum, inc) => sum + inc.amount, 0);
-  const netSavings = totalIncome - totalExpenses;
-
-  // Calculate top categories
-  const categoryTotals: { [key: string]: number } = {};
-  filteredExpenses.forEach(expense => {
-    categoryTotals[expense.category] = (categoryTotals[expense.category] || 0) + expense.amount;
-  });
-
-  const topCategories = Object.entries(categoryTotals)
-    .map(([category, amount]) => ({ category, amount }))
-    .sort((a, b) => b.amount - a.amount)
-    .slice(0, 5);
-
-  return {
-    expenses: filteredExpenses,
-    income: filteredIncome,
-    budgets,
-    dateRange: { from: dateFrom, to: dateTo },
-    summary: {
-      totalExpenses,
-      totalIncome,
-      netSavings,
-      topCategories
+const calculateRecurringDates = (expense: Expense, startDate: Date, endDate: Date): Date[] => {
+  const dates = [];
+  const expenseDate = new Date(expense.date);
+  let currentDate = new Date(expenseDate);
+  
+  while (currentDate <= endDate) {
+    if (currentDate >= startDate) {
+      dates.push(new Date(currentDate));
     }
-  };
+    
+    switch (expense.recurringType) {
+      case 'daily':
+        currentDate.setDate(currentDate.getDate() + 1);
+        break;
+      case 'weekly':
+        currentDate.setDate(currentDate.getDate() + 7);
+        break;
+      case 'monthly':
+        currentDate.setMonth(currentDate.getMonth() + 1);
+        break;
+      case 'yearly':
+        currentDate.setFullYear(currentDate.getFullYear() + 1);
+        break;
+      default:
+        return dates;
+    }
+    
+    if (expense.recurringEndDate && currentDate > new Date(expense.recurringEndDate)) {
+      break;
+    }
+  }
+  
+  return dates;
+};
+
+const calculateMonthlySpending = (expenses: Expense[]): number[] => {
+  const monthlyTotals: { [key: string]: number } = {};
+  
+  expenses.forEach(expense => {
+    const monthKey = expense.date.toISOString().slice(0, 7); // YYYY-MM
+    monthlyTotals[monthKey] = (monthlyTotals[monthKey] || 0) + expense.amount;
+  });
+  
+  return Object.values(monthlyTotals);
 };
 
 // Real-time listeners
@@ -925,30 +1138,29 @@ export const subscribeToExpenses = (userId: string, callback: (expenses: Expense
     const expenses = snapshot.docs.map(doc => ({ 
       id: doc.id, 
       ...doc.data(),
-      date: doc.data().date instanceof Timestamp ? doc.data().date.toDate() : new Date(doc.data().date),
-      createdAt: doc.data().createdAt instanceof Timestamp ? doc.data().createdAt.toDate() : new Date(doc.data().createdAt),
-      updatedAt: doc.data().updatedAt instanceof Timestamp ? doc.data().updatedAt.toDate() : new Date(doc.data().updatedAt),
+      date: doc.data().date?.toDate?.() || new Date(doc.data().date),
+      createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt),
+      updatedAt: doc.data().updatedAt?.toDate?.() || new Date(doc.data().updatedAt),
     } as Expense));
     callback(expenses);
   });
 };
 
-export const subscribeToReminders = (userId: string, callback: (reminders: Reminder[]) => void) => {
+export const subscribeToNotifications = (userId: string, callback: (notifications: Notification[]) => void) => {
   const q = query(
-    collection(db, 'reminders'),
+    collection(db, 'notifications'),
     where('userId', '==', userId),
-    orderBy('dueDate', 'asc')
+    where('read', '==', false),
+    orderBy('createdAt', 'desc')
   );
 
   return onSnapshot(q, (snapshot) => {
-    const reminders = snapshot.docs.map(doc => ({ 
+    const notifications = snapshot.docs.map(doc => ({ 
       id: doc.id, 
       ...doc.data(),
-      dueDate: doc.data().dueDate?.toDate?.() || doc.data().dueDate,
       createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
-      updatedAt: doc.data().updatedAt?.toDate?.() || doc.data().updatedAt,
-    } as Reminder));
-    callback(reminders);
+    } as Notification));
+    callback(notifications);
   });
 };
 
@@ -966,27 +1178,9 @@ export const subscribeToGroups = (userId: string, callback: (groups: Group[]) =>
       updatedAt: doc.data().updatedAt?.toDate?.() || doc.data().updatedAt,
       memberDetails: doc.data().memberDetails?.map((member: any) => ({
         ...member,
-        joinedAt: member.joinedAt instanceof Timestamp ? member.joinedAt.toDate() : new Date(member.joinedAt)
+        joinedAt: member.joinedAt?.toDate?.() || new Date(member.joinedAt)
       })) || []
     } as Group));
     callback(groups);
-  });
-};
-
-export const subscribeToBudgetAlerts = (userId: string, callback: (alerts: BudgetAlert[]) => void) => {
-  const q = query(
-    collection(db, 'budgetAlerts'),
-    where('userId', '==', userId),
-    where('read', '==', false),
-    orderBy('createdAt', 'desc')
-  );
-
-  return onSnapshot(q, (snapshot) => {
-    const alerts = snapshot.docs.map(doc => ({ 
-      id: doc.id, 
-      ...doc.data(),
-      createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
-    } as BudgetAlert));
-    callback(alerts);
   });
 };

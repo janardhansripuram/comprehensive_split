@@ -10,11 +10,42 @@ import {
 } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
-import { getExpenses, getIncome, getBudgets, getSplits } from '@/services/firestore';
-import { Expense, Income, Budget, Split } from '@/types';
+import { 
+  getExpenses, 
+  getIncome, 
+  getBudgets, 
+  getSplits, 
+  getNotifications,
+  getReminders,
+  calculateNetWorth
+} from '@/services/firestore';
+import { Expense, Income, Budget, Split, Notification, Reminder } from '@/types';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { DollarSign, TrendingUp, TrendingDown, Target, Users, Plus, ArrowUpRight, ArrowDownLeft, Calendar, ChartPie as PieChart, Bell, CreditCard, Wallet, Activity } from 'lucide-react-native';
+import { 
+  DollarSign, 
+  TrendingUp, 
+  TrendingDown, 
+  Target, 
+  Users, 
+  Plus, 
+  ArrowUpRight, 
+  ArrowDownLeft, 
+  Calendar, 
+  ChartPie as PieChart, 
+  Bell, 
+  CreditCard, 
+  Wallet, 
+  Activity,
+  Award,
+  BarChart3
+} from 'lucide-react-native';
+import WalletManager from '@/components/WalletManager';
+import InvestmentTracker from '@/components/InvestmentTracker';
+import FinancialCalendar from '@/components/FinancialCalendar';
+import SettlementManager from '@/components/SettlementManager';
+import AchievementsCenter from '@/components/AchievementsCenter';
+import NotificationCenter from '@/components/NotificationCenter';
 
 const { width } = Dimensions.get('window');
 
@@ -22,9 +53,12 @@ interface DashboardStats {
   totalExpenses: number;
   totalIncome: number;
   netSavings: number;
+  netWorth: { [currency: string]: number };
   budgetUsage: number;
   pendingSplits: number;
   monthlyChange: number;
+  unreadNotifications: number;
+  upcomingReminders: number;
 }
 
 export default function DashboardScreen() {
@@ -35,14 +69,25 @@ export default function DashboardScreen() {
     totalExpenses: 0,
     totalIncome: 0,
     netSavings: 0,
+    netWorth: {},
     budgetUsage: 0,
     pendingSplits: 0,
     monthlyChange: 0,
+    unreadNotifications: 0,
+    upcomingReminders: 0,
   });
   
   const [recentExpenses, setRecentExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Modal states
+  const [showWalletManager, setShowWalletManager] = useState(false);
+  const [showInvestmentTracker, setShowInvestmentTracker] = useState(false);
+  const [showFinancialCalendar, setShowFinancialCalendar] = useState(false);
+  const [showSettlementManager, setShowSettlementManager] = useState(false);
+  const [showAchievementsCenter, setShowAchievementsCenter] = useState(false);
+  const [showNotificationCenter, setShowNotificationCenter] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -55,11 +100,14 @@ export default function DashboardScreen() {
     
     setLoading(true);
     try {
-      const [expenses, income, budgets, splits] = await Promise.all([
+      const [expenses, income, budgets, splits, notifications, reminders, netWorth] = await Promise.all([
         getExpenses(user.uid, { limit: 50 }),
         getIncome(user.uid),
         getBudgets(user.uid),
         getSplits(user.uid),
+        getNotifications(user.uid),
+        getReminders(user.uid),
+        calculateNetWorth(user.uid)
       ]);
 
       // Calculate current month data
@@ -77,14 +125,29 @@ export default function DashboardScreen() {
       const pendingSplits = splits.filter(s => 
         s.participants.some(p => !p.settled)
       ).length;
+      
+      // Count unread notifications
+      const unreadNotifications = notifications.filter(n => !n.read).length;
+      
+      // Count upcoming reminders (due in the next 7 days)
+      const now = new Date();
+      const nextWeek = new Date(now);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      
+      const upcomingReminders = reminders.filter(r => 
+        !r.completed && r.dueDate >= now && r.dueDate <= nextWeek
+      ).length;
 
       setStats({
         totalExpenses,
         totalIncome,
         netSavings: totalIncome - totalExpenses,
+        netWorth,
         budgetUsage: totalBudget > 0 ? (totalExpenses / totalBudget) * 100 : 0,
         pendingSplits,
         monthlyChange: 12.5, // Mock data - would calculate from previous month
+        unreadNotifications,
+        upcomingReminders,
       });
 
       setRecentExpenses(expenses.slice(0, 5));
@@ -127,6 +190,33 @@ export default function DashboardScreen() {
       onPress: () => router.push('/splits'),
     },
   ];
+  
+  const quickTools = [
+    {
+      icon: Wallet,
+      label: 'Wallet',
+      color: colors.success,
+      onPress: () => setShowWalletManager(true),
+    },
+    {
+      icon: BarChart3,
+      label: 'Investments',
+      color: colors.secondary,
+      onPress: () => setShowInvestmentTracker(true),
+    },
+    {
+      icon: Calendar,
+      label: 'Calendar',
+      color: colors.accent,
+      onPress: () => setShowFinancialCalendar(true),
+    },
+    {
+      icon: CreditCard,
+      label: 'Settlements',
+      color: colors.warning,
+      onPress: () => setShowSettlementManager(true),
+    },
+  ];
 
   const styles = StyleSheet.create({
     container: {
@@ -145,9 +235,39 @@ export default function DashboardScreen() {
       marginBottom: 8,
     },
     subtitle: {
-      fontSize: 16,
+      fontSize: 14,
       fontFamily: 'Inter-Regular',
       color: colors.textSecondary,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      gap: 12,
+    },
+    toolsContainer: {
+      paddingHorizontal: 24,
+      marginBottom: 24,
+    },
+    headerActionButton: {
+      backgroundColor: colors.surface,
+      borderRadius: 8,
+      padding: 8,
+      position: 'relative',
+    },
+    notificationBadge: {
+      position: 'absolute',
+      top: -5,
+      right: -5,
+      backgroundColor: colors.error,
+      borderRadius: 10,
+      width: 20,
+      height: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    notificationBadgeText: {
+      color: '#FFFFFF',
+      fontSize: 10,
+      fontFamily: 'Inter-Bold',
     },
     scrollContainer: {
       flex: 1,
@@ -283,10 +403,34 @@ export default function DashboardScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.greeting}>
-          Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}!
-        </Text>
-        <Text style={styles.subtitle}>Here's your financial overview</Text>
+        <View>
+          <Text style={styles.greeting}>
+            Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}!
+          </Text>
+          <Text style={styles.subtitle}>Here's your financial overview</Text>
+        </View>
+        <View style={styles.headerActions}>
+          <TouchableOpacity 
+            style={styles.headerActionButton}
+            onPress={() => setShowAchievementsCenter(true)}
+          >
+            <Award size={20} color={colors.primary} />
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.headerActionButton}
+            onPress={() => setShowNotificationCenter(true)}
+          >
+            <Bell size={20} color={colors.primary} />
+            {stats.unreadNotifications > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>
+                  {stats.unreadNotifications > 9 ? '9+' : stats.unreadNotifications}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView 
@@ -349,6 +493,25 @@ export default function DashboardScreen() {
           </View>
         </View>
 
+        {/* Quick Tools */}
+        <View style={styles.toolsContainer}>
+          <Text style={styles.sectionTitle}>Quick Tools</Text>
+          <View style={styles.quickActionsGrid}>
+            {quickTools.map((tool, index) => (
+              <TouchableOpacity
+                key={index}
+                style={styles.quickActionItem}
+                onPress={tool.onPress}
+              >
+                <View style={styles.quickActionIcon}>
+                  <tool.icon size={32} color={tool.color} />
+                </View>
+                <Text style={styles.quickActionLabel}>{tool.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
         {/* Recent Expenses */}
         <View style={styles.recentSection}>
           <Text style={styles.sectionTitle}>Recent Expenses</Text>
@@ -372,6 +535,37 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      
+      {/* Advanced Feature Modals */}
+      <WalletManager 
+        visible={showWalletManager} 
+        onClose={() => setShowWalletManager(false)} 
+      />
+      
+      <InvestmentTracker 
+        visible={showInvestmentTracker} 
+        onClose={() => setShowInvestmentTracker(false)} 
+      />
+      
+      <FinancialCalendar 
+        visible={showFinancialCalendar} 
+        onClose={() => setShowFinancialCalendar(false)} 
+      />
+      
+      <SettlementManager 
+        visible={showSettlementManager} 
+        onClose={() => setShowSettlementManager(false)} 
+      />
+      
+      <AchievementsCenter 
+        visible={showAchievementsCenter} 
+        onClose={() => setShowAchievementsCenter(false)} 
+      />
+      
+      <NotificationCenter 
+        visible={showNotificationCenter} 
+        onClose={() => setShowNotificationCenter(false)} 
+      />
     </View>
   );
 }
