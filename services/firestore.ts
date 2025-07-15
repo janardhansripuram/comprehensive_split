@@ -616,8 +616,7 @@ export const acceptFriendRequest = async (requestId: string, fromUserId: string,
 export const getFriends = async (userId: string): Promise<Friend[]> => {
   const q = query(
     collection(db, 'friends'),
-    where('userId', '==', userId),
-    where('status', '==', 'accepted')
+    where('userId', '==', userId)
   );
 
   const snapshot = await getDocs(q);
@@ -669,18 +668,19 @@ export const createGroup = async (group: Omit<Group, 'id' | 'createdAt' | 'updat
 export const getGroups = async (userId: string): Promise<Group[]> => {
   const q = query(
     collection(db, 'groups'),
-    where('members', 'array-contains', userId)
+    where('members', 'array-contains', userId),
+    orderBy('createdAt', 'desc')
   );
 
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => ({ 
     id: doc.id, 
     ...doc.data(),
-    createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt),
-    updatedAt: doc.data().updatedAt?.toDate?.() || new Date(doc.data().updatedAt),
+    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt || new Date(),
+    updatedAt: doc.data().updatedAt?.toDate?.() || doc.data().updatedAt || new Date(),
     memberDetails: doc.data().memberDetails?.map((member: any) => ({
       ...member,
-      joinedAt: member.joinedAt?.toDate?.() || new Date(member.joinedAt)
+      joinedAt: member.joinedAt?.toDate?.() || member.joinedAt || new Date()
     })) || []
   } as Group));
 };

@@ -71,15 +71,21 @@ function GroupsScreen() {
     setLoading(true);
     try {
       const groupsData = await getGroups(user.uid);
+      console.log('Groups data:', groupsData);
       setGroups(groupsData);
       
       // Load expenses for each group
       const expensesData: { [groupId: string]: Expense[] } = {};
-      for (const group of groupsData) {
-        const expenses = await getExpenses(user.uid, { groupId: group.id });
-        expensesData[group.id] = expenses;
+      try {
+        for (const group of groupsData) {
+          const expenses = await getExpenses(user.uid, { groupId: group.id });
+          expensesData[group.id] = expenses;
+        }
+        setGroupExpenses(expensesData);
+      } catch (error) {
+        console.error('Error loading group expenses:', error);
+        // Continue even if expenses fail to load
       }
-      setGroupExpenses(expensesData);
     } catch (error) {
       console.error('Error loading groups:', error);
       Alert.alert('Error', 'Failed to load groups');
@@ -119,7 +125,7 @@ function GroupsScreen() {
   const getGroupStats = (group: Group) => {
     const expenses = groupExpenses[group.id] || [];
     const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-    const recentActivity = expenses.length > 0 
+    const recentActivity = expenses && expenses.length > 0 
       ? `Last expense: ${expenses[0]?.description || 'No expenses'}`
       : 'No recent activity';
     

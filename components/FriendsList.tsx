@@ -63,13 +63,21 @@ export default function FriendsList() {
   const loadFriends = async () => {
     if (!user) return;
     
+    setLoading(true);
     try {
       const friendsData = await getFriends(user.uid);
+      console.log('Friends data:', friendsData);
       
       // Get friend details
       const friendsWithDetails = await Promise.all(
         friendsData.map(async (friend) => {
-          const friendProfile = await getUserProfile(friend.friendId);
+          let friendProfile;
+          try {
+            friendProfile = await getUserProfile(friend.friendId);
+          } catch (error) {
+            console.error('Error fetching friend profile:', error);
+            friendProfile = null;
+          }
           return {
             ...friend,
             displayName: friendProfile?.displayName,
@@ -81,6 +89,9 @@ export default function FriendsList() {
       setFriends(friendsWithDetails);
     } catch (error) {
       console.error('Error loading friends:', error);
+       Alert.alert('Error', 'Failed to load friends. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
