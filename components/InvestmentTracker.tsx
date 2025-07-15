@@ -19,16 +19,7 @@ import {
 } from '@/services/firestore';
 import { Investment, INVESTMENT_TYPES, CURRENCIES } from '@/types';
 import { LinearGradient } from 'expo-linear-gradient';
-import {
-  TrendingUp,
-  Plus,
-  DollarSign,
-  Calendar,
-  BarChart3,
-  X,
-  Edit3,
-  Trash2,
-} from 'lucide-react-native';
+import { TrendingUp, Plus, DollarSign, Calendar, ChartBar as BarChart3, X, CreditCard as Edit3, Trash2 } from 'lucide-react-native';
 
 interface InvestmentTrackerProps {
   visible: boolean;
