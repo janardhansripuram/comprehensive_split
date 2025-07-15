@@ -13,14 +13,7 @@ import { useAuth } from '@/context/AuthContext';
 import { getExpenses, getIncome, getBudgets } from '@/services/firestore';
 import { Expense, Income, Budget } from '@/types';
 import { LinearGradient } from 'expo-linear-gradient';
-import {
-  X,
-  PieChart,
-  BarChart3,
-  TrendingUp,
-  Calendar,
-  DollarSign,
-} from 'lucide-react-native';
+import { X, ChartPie as PieChart, ChartBar as BarChart3, TrendingUp, Calendar, DollarSign } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
 
