@@ -15,20 +15,7 @@ import { Expense, Income, Budget } from '@/types';
 import { LinearGradient } from 'expo-linear-gradient';
 import DataExport from '@/components/DataExport';
 import InteractiveCharts from '@/components/InteractiveCharts';
-import {
-  PieChart,
-  BarChart,
-  TrendingUp,
-  TrendingDown,
-  Calendar,
-  Download,
-  Filter,
-  DollarSign,
-  Target,
-  Activity,
-  ArrowUpRight,
-  ArrowDownLeft,
-} from 'lucide-react-native';
+import { ChartPie as PieChart, ChartBar as BarChart, TrendingUp, TrendingDown, Calendar, Download, Filter, DollarSign, Target, Activity, ArrowUpRight, ArrowDownLeft } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
 
