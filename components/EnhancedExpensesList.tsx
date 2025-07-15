@@ -20,22 +20,7 @@ import ExpenseTemplates from '@/components/ExpenseTemplates';
 import AdvancedFilters, { ExpenseFilters } from '@/components/AdvancedFilters';
 import BulkExpenseActions from '@/components/BulkExpenseActions';
 import ReceiptScanner from '@/components/ReceiptScanner';
-import {
-  Plus,
-  Search,
-  Filter,
-  Calendar,
-  DollarSign,
-  Receipt,
-  Camera,
-  Edit3,
-  Trash2,
-  MoreVertical,
-  X,
-  Template,
-  CheckSquare,
-  Square,
-} from 'lucide-react-native';
+import { Plus, Search, Filter, Calendar, DollarSign, Receipt, Camera, CreditCard as Edit3, Trash2, MoveVertical as MoreVertical, X, LayoutTemplate as Template, SquareCheck as CheckSquare, Square } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface EnhancedExpensesListProps {
