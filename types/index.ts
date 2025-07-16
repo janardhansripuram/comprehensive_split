@@ -1,7 +1,7 @@
 export interface User {
   id: string;
   email: string;
-  displayName: string;
+  displayName?: string;
   defaultCurrency: string;
   walletBalances: { [currency: string]: number };
   referralCode?: string;
@@ -58,6 +58,7 @@ export interface Budget {
   amount: number;
   currency: string;
   period: 'weekly' | 'monthly' | 'yearly' | 'custom';
+  month?: string;
   startDate?: Date;
   endDate?: Date;
   rollover?: boolean;
@@ -86,6 +87,10 @@ export interface SavingsGoal {
   status: 'active' | 'completed' | 'paused';
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface GroupSavingsGoal extends SavingsGoal {
+  groupId: string;
 }
 
 export interface Investment {
@@ -123,6 +128,8 @@ export interface Friend {
   friendId: string;
   status: 'pending' | 'accepted' | 'blocked';
   createdAt: Date;
+  displayName?: string;
+  email?: string;
 }
 
 export interface FriendRequest {
@@ -142,14 +149,14 @@ export interface Group {
   creatorId: string;
   admins: string[];
   members: string[];
-  memberDetails: {
+  memberDetails?: {
     userId: string;
     displayName: string;
     email: string;
     role: 'creator' | 'admin' | 'member';
     joinedAt: Date;
   }[];
-  settings: {
+  settings?: {
     allowMembersToAddExpenses: boolean;
     allowMembersToInvite: boolean;
     requireApprovalForExpenses: boolean;
@@ -286,6 +293,19 @@ export interface AIInsight {
   createdAt: Date;
 }
 
+export interface SpendingInsight extends AIInsight {}
+
+export interface BudgetAlert {
+  id: string;
+  userId: string;
+  budgetId: string;
+  category: string;
+  type: 'threshold' | 'exceeded' | 'rollover';
+  message: string;
+  read: boolean;
+  createdAt: Date;
+}
+
 export interface CurrencyRate {
   id: string;
   fromCurrency: string;
@@ -311,6 +331,19 @@ export interface BroadcastMessage {
   active: boolean;
   createdAt: Date;
   expiresAt?: Date;
+}
+
+export interface ExpenseTemplate {
+  id: string;
+  userId: string;
+  name: string;
+  description: string;
+  amount: number;
+  category: string;
+  currency: string;
+  tags?: string[];
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // Constants

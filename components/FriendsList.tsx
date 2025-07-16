@@ -12,10 +12,10 @@ import {
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import {
-  getFriends, 
-  getFriendRequests, 
-  sendFriendRequest, 
-  acceptFriendRequest, 
+  getFriends,
+  getFriendRequests,
+  sendFriendRequest,
+  acceptFriendRequest,
   getUserProfile
 } from '@/services/firestore';
 import {
@@ -30,6 +30,7 @@ import {
 interface Friend {
   id: string;
   friendId: string;
+  status: string;
   displayName?: string;
   email?: string;
 }
@@ -68,6 +69,7 @@ export default function FriendsList() {
     setLoading(true);
     try {
       console.log('Loading friends for user:', user.uid);
+      // Get friends with status 'accepted'
       const friendsData = await getFriends(user.uid);
       console.log('Friends data loaded:', friendsData.length, 'friends found');
       

@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
-import { getFriends, createSplit } from '@/services/firestore';
+import { getFriends, createSplit, getUserProfile } from '@/services/firestore';
 import { Expense, Split } from '@/types';
 import {
   X,
@@ -99,6 +99,7 @@ export default function SplitExpenseModal({
       {
         userId: user.uid,
         name: user.displayName || 'You',
+        userName: user.displayName || 'You',
         email: user.email || '',
         amount: 0,
         percentage: 0,
@@ -107,6 +108,7 @@ export default function SplitExpenseModal({
       ...friends.map(friend => ({
         userId: friend.friendId,
         name: friend.displayName || friend.email || 'Unknown',
+        userName: friend.displayName || friend.email || 'Unknown',
         email: friend.email || '',
         amount: 0,
         percentage: 0,

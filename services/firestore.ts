@@ -26,8 +26,6 @@ import {
   Income, 
   Budget, 
   Group, 
-  GroupInvitation,
-  GroupActivity,
   Split,
   SettlementRequest,
   Reminder, 
@@ -40,7 +38,13 @@ import {
   Achievement,
   AIInsight,
   CurrencyRate,
-  SystemActivity
+  SystemActivity,
+  GroupInvitation,
+  GroupActivity,
+  GroupSavingsGoal,
+  ExpenseTemplate,
+  BudgetAlert,
+  SpendingInsight
 } from '@/types';
 
 // User Management
@@ -663,7 +667,8 @@ export const acceptFriendRequest = async (requestId: string, fromUserId: string,
 export const getFriends = async (userId: string): Promise<Friend[]> => {
   const q = query(
     collection(db, 'friends'),
-    where('userId', '==', userId)
+    where('userId', '==', userId),
+    where('status', '==', 'accepted')
   );
 
   console.log('Fetching friends for userId:', userId);
@@ -719,7 +724,7 @@ export const getGroups = async (userId: string): Promise<Group[]> => {
   console.log('Fetching groups for userId:', userId);
   const q = query(
     collection(db, 'groups'),
-    where('memberIds', 'array-contains', userId)
+    where('members', 'array-contains', userId)
   );
 
   const snapshot = await getDocs(q);
@@ -1036,7 +1041,7 @@ export const getGroupActivities = async (groupId: string): Promise<GroupActivity
 };
 
 // Group Savings Goals
-export const getGroupSavingsGoals = async (groupId: string): Promise<SavingsGoal[]> => {
+export const getGroupSavingsGoals = async (groupId: string): Promise<GroupSavingsGoal[]> => {
   const q = query(
     collection(db, 'savingsGoals'),
     where('groupId', '==', groupId)
@@ -1053,7 +1058,7 @@ export const getGroupSavingsGoals = async (groupId: string): Promise<SavingsGoal
       ...contrib,
       date: contrib.date?.toDate?.() || contrib.date
     })) || []
-  } as SavingsGoal));
+  } as GroupSavingsGoal));
 };
 
 export const contributeToGoal = async (goalId: string, contribution: {
@@ -1318,7 +1323,7 @@ export const generateAIInsights = async (userId: string) => {
   return insights;
 };
 
-export const getSpendingInsights = async (userId: string): Promise<AIInsight[]> => {
+export const getSpendingInsights = async (userId: string): Promise<SpendingInsight[]> => {
   const q = query(
     collection(db, 'aiInsights'),
     where('userId', '==', userId),
@@ -1330,7 +1335,7 @@ export const getSpendingInsights = async (userId: string): Promise<AIInsight[]> 
     id: doc.id, 
     ...doc.data(),
     createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
-  } as AIInsight));
+  } as SpendingInsight));
 };
 
 export const markInsightAsRead = async (insightId: string) => {
@@ -1394,7 +1399,7 @@ export const convertCurrency = async (amount: number, fromCurrency: string, toCu
 };
 
 // Expense Templates
-export const saveExpenseTemplate = async (template: any): Promise<string> => {
+export const saveExpenseTemplate = async (template: Omit<ExpenseTemplate, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
   const templateRef = collection(db, 'expenseTemplates');
   const docRef = await addDoc(templateRef, {
     ...template,
@@ -1404,7 +1409,7 @@ export const saveExpenseTemplate = async (template: any): Promise<string> => {
   return docRef.id;
 };
 
-export const getExpenseTemplates = async (userId: string): Promise<any[]> => {
+export const getExpenseTemplates = async (userId: string): Promise<ExpenseTemplate[]> => {
   const q = query(
     collection(db, 'expenseTemplates'),
     where('userId', '==', userId),
@@ -1417,7 +1422,7 @@ export const getExpenseTemplates = async (userId: string): Promise<any[]> => {
     ...doc.data(),
     createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
     updatedAt: doc.data().updatedAt?.toDate?.() || doc.data().updatedAt,
-  }));
+  } as ExpenseTemplate));
 };
 
 export const deleteExpenseTemplate = async (templateId: string): Promise<void> => {

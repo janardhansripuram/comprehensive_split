@@ -12,7 +12,13 @@ import {
 } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
-import { getGroups, createGroup, getExpenses, getUserProfile } from '@/services/firestore';
+import { 
+  getGroups, 
+  createGroup, 
+  getExpenses, 
+  getUserProfile,
+  addGroupActivity
+} from '@/services/firestore';
 import { Group, Expense } from '@/types';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -109,7 +115,7 @@ function GroupsScreen() {
       const userProfile = await getUserProfile(user.uid);
       console.log('User profile for group creation:', userProfile?.displayName || user.email);
       
-      await createGroup({
+      const groupId = await createGroup({
         name: groupName.trim(),
         description: groupDescription.trim(),
         creatorId: user.uid,
@@ -122,6 +128,15 @@ function GroupsScreen() {
           role: 'creator',
           joinedAt: new Date()
         }]
+      });
+
+      // Add group activity
+      await addGroupActivity({
+        groupId,
+        userId: user.uid,
+        userName: userProfile?.displayName || user.email || 'You',
+        type: 'group_updated',
+        description: `Created group "${groupName.trim()}"`,
       });
 
       Alert.alert('Success', 'Group created successfully!');
