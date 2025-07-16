@@ -719,7 +719,7 @@ export const getGroups = async (userId: string): Promise<Group[]> => {
   console.log('Fetching groups for userId:', userId);
   const q = query(
     collection(db, 'groups'),
-    where('members', 'array-contains', userId)
+    where('memberIds', 'array-contains', userId)
   );
 
   const snapshot = await getDocs(q);
