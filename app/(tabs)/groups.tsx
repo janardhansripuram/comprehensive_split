@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
-import { getGroups, createGroup, getExpenses } from '@/services/firestore';
+import { getGroups, createGroup, getExpenses, getUserProfile } from '@/services/firestore';
 import { Group, Expense } from '@/types';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -74,7 +74,7 @@ function GroupsScreen() {
     try {
       console.log('Loading groups for user:', user.uid);
       const groupsData = await getGroups(user.uid);
-      console.log('Groups data:', groupsData);
+      console.log('Groups data loaded:', groupsData.length, 'groups found');
       setGroups(groupsData);
       
       // Load expenses for each group
@@ -106,11 +106,22 @@ function GroupsScreen() {
     console.log('Creating group with name:', groupName.trim());
     setCreating(true);
     try {
+      const userProfile = await getUserProfile(user.uid);
+      console.log('User profile for group creation:', userProfile?.displayName || user.email);
+      
       await createGroup({
         name: groupName.trim(),
         description: groupDescription.trim(),
         creatorId: user.uid,
-        members: [user.uid]
+        members: [user.uid],
+        admins: [user.uid],
+        memberDetails: [{
+          userId: user.uid,
+          displayName: userProfile?.displayName || user.email || 'You',
+          email: userProfile?.email || '',
+          role: 'creator',
+          joinedAt: new Date()
+        }]
       });
 
       Alert.alert('Success', 'Group created successfully!');
@@ -129,7 +140,7 @@ function GroupsScreen() {
   const getGroupStats = (group: Group) => {
     const expenses = groupExpenses[group.id] || [];
     const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-    const recentActivity = expenses.length > 0 
+    const recentActivity = expenses && expenses.length > 0 
       ? `Last expense: ${expenses[0]?.description || 'No expenses'}`
       : 'No recent activity';
     
@@ -465,13 +476,10 @@ function GroupsScreen() {
                       <Text style={styles.groupDescription}>{group.description || ''}</Text>
                     )}
                     <Text style={styles.groupMembers}>
-                      {group.members.length} member{group.members.length !== 1 ? 's' : ''}
+                      {group.members?.length || 0} member{(group.members?.length || 0) !== 1 ? 's' : ''}
                     </Text>
                     <Text style={styles.groupActivity}>{stats.recentActivity}</Text>
                   </View>
-                  <TouchableOpacity style={styles.settingsButton}>
-                    <Settings size={20} color={colors.textSecondary} />
-                  </TouchableOpacity>
                   <TouchableOpacity 
                     style={styles.settingsButton}
                     onPress={() => setShowGroupManagement(group)}
@@ -490,7 +498,7 @@ function GroupsScreen() {
                     <Text style={styles.statLabel}>Transactions</Text>
                   </View>
                   <View style={styles.statItem}>
-                    <Text style={styles.statValue}>{group.members.length}</Text>
+                    <Text style={styles.statValue}>{group.members?.length || 0}</Text>
                     <Text style={styles.statLabel}>Members</Text>
                   </View>
                 </View>

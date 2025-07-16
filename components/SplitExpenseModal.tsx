@@ -186,6 +186,7 @@ export default function SplitExpenseModal({
   const handleCreateSplit = async () => {
     if (!expense || !user || !validateSplit()) return;
 
+    setLoading(true);
     try {
       const selectedParticipants = participants.filter(p => p.selected);
       
@@ -195,7 +196,7 @@ export default function SplitExpenseModal({
         participants: selectedParticipants.map((p) => ({
           userId: p.userId,
           userName: p.userName || p.name,
-          amount: p.amount,
+          amount: parseFloat(p.amount.toString()),
           paid: p.userId === user.uid, // Creator has already paid
           settled: false,
         })),
@@ -218,7 +219,7 @@ export default function SplitExpenseModal({
   const styles = StyleSheet.create({
     modalOverlay: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.5)',
+      backgroundColor: 'rgba(0,0,0,0.7)',
       justifyContent: 'flex-end',
     },
     modalContent: {
