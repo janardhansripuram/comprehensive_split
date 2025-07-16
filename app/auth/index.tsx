@@ -175,7 +175,7 @@ export default function AuthScreen() {
                 value={email}
                 onChangeText={(text) => setEmail(text.trim())}
                 placeholder="Enter your email"
-                placeholderTextColor={colors.textSecondary}
+                placeholderTextColor={colors.textSecondary || '#999'}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoComplete="email"
@@ -192,7 +192,7 @@ export default function AuthScreen() {
                 value={password}
                 onChangeText={setPassword}
                 placeholder="Enter your password"
-                placeholderTextColor={colors.textSecondary}
+                placeholderTextColor={colors.textSecondary || '#999'}
                 secureTextEntry={!showPassword}
                 autoComplete="password"
               />
@@ -219,7 +219,7 @@ export default function AuthScreen() {
                   value={confirmPassword}
                   onChangeText={setConfirmPassword}
                   placeholder="Confirm your password"
-                  placeholderTextColor={colors.textSecondary}
+                  placeholderTextColor={colors.textSecondary || '#999'}
                   secureTextEntry={!showPassword}
                   autoComplete="password"
                 />
@@ -237,7 +237,7 @@ export default function AuthScreen() {
                   value={referralCode}
                   onChangeText={setReferralCode}
                   placeholder="Enter referral code"
-                  placeholderTextColor={colors.textSecondary}
+                  placeholderTextColor={colors.textSecondary || '#999'}
                   autoCapitalize="characters"
                 />
               </View>
