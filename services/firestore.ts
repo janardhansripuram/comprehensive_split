@@ -279,12 +279,15 @@ export const addBudget = async (budget: Omit<Budget, 'id' | 'createdAt' | 'updat
   return docRef.id;
 };
 
-export const getBudgets = async (userId: string): Promise<Budget[]> => {
-  const q = query(
+export const getBudgets = async (userId: string, month?: string): Promise<Budget[]> => {
+  let q = query(
     collection(db, 'budgets'),
-    where('userId', '==', userId),
-    orderBy('createdAt', 'desc')
+    where('userId', '==', userId)
   );
+  
+  if (month) {
+    q = query(q, where('month', '==', month));
+  }
 
   const snapshot = await getDocs(q);
   return snapshot.docs.map(doc => ({ 
@@ -343,12 +346,14 @@ export const createSavingsGoal = async (goal: Omit<SavingsGoal, 'id' | 'createdA
 export const getSavingsGoals = async (userId: string, groupId?: string): Promise<SavingsGoal[]> => {
   let q = query(
     collection(db, 'savingsGoals'),
-    where('userId', '==', userId),
-    orderBy('createdAt', 'desc')
+    where('userId', '==', userId)
   );
   
   if (groupId) {
-    q = query(q, where('groupId', '==', groupId));
+    q = query(
+      collection(db, 'savingsGoals'),
+      where('groupId', '==', groupId)
+    );
   }
 
   const snapshot = await getDocs(q);
@@ -365,7 +370,7 @@ export const getSavingsGoals = async (userId: string, groupId?: string): Promise
   } as SavingsGoal));
 };
 
-export const contributeToGoal = async (goalId: string, contribution: {
+export const contributeToSavingsGoal = async (goalId: string, contribution: {
   userId: string;
   userName: string;
   amount: number;
@@ -397,8 +402,7 @@ export const addInvestment = async (investment: Omit<Investment, 'id' | 'created
 export const getInvestments = async (userId: string): Promise<Investment[]> => {
   const q = query(
     collection(db, 'investments'),
-    where('userId', '==', userId),
-    orderBy('purchaseDate', 'desc')
+    where('userId', '==', userId)
   );
 
   const snapshot = await getDocs(q);
@@ -409,6 +413,25 @@ export const getInvestments = async (userId: string): Promise<Investment[]> => {
     createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt),
     updatedAt: doc.data().updatedAt?.toDate?.() || new Date(doc.data().updatedAt),
   } as Investment));
+};
+
+export const updateInvestment = async (investmentId: string, updates: Partial<Investment>): Promise<void> => {
+  const investmentRef = doc(db, 'investments', investmentId);
+  const updateData = { ...updates };
+  
+  if (updates.purchaseDate) {
+    updateData.purchaseDate = Timestamp.fromDate(new Date(updates.purchaseDate));
+  }
+  
+  await updateDoc(investmentRef, {
+    ...updateData,
+    updatedAt: serverTimestamp()
+  });
+};
+
+export const deleteInvestment = async (investmentId: string): Promise<void> => {
+  const investmentRef = doc(db, 'investments', investmentId);
+  await deleteDoc(investmentRef);
 };
 
 export const calculateNetWorth = async (userId: string): Promise<{ [currency: string]: number }> => {
@@ -443,8 +466,7 @@ export const getSplits = async (userId: string): Promise<Split[]> => {
   // Get splits where user is creator or participant
   const creatorQuery = query(
     collection(db, 'splits'),
-    where('creatorId', '==', userId),
-    orderBy('createdAt', 'desc')
+    where('creatorId', '==', userId)
   );
 
   const creatorSnapshot = await getDocs(creatorQuery);
@@ -471,6 +493,14 @@ export const getSplits = async (userId: string): Promise<Split[]> => {
   return allSplits.filter((split, index, self) => 
     index === self.findIndex(s => s.id === split.id)
   ).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+};
+
+export const updateSplit = async (splitId: string, updates: Partial<Split>): Promise<void> => {
+  const splitRef = doc(db, 'splits', splitId);
+  await updateDoc(splitRef, {
+    ...updates,
+    updatedAt: serverTimestamp()
+  });
 };
 
 export const createSettlementRequest = async (request: Omit<SettlementRequest, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
@@ -633,8 +663,7 @@ export const acceptFriendRequest = async (requestId: string, fromUserId: string,
 export const getFriends = async (userId: string): Promise<Friend[]> => {
   const q = query(
     collection(db, 'friends'),
-    where('userId', '==', userId),
-    where('status', '==', 'accepted')
+    where('userId', '==', userId)
   );
 
   console.log('Fetching friends for userId:', userId);
@@ -690,36 +719,11 @@ export const getGroups = async (userId: string): Promise<Group[]> => {
   console.log('Fetching groups for userId:', userId);
   const q = query(
     collection(db, 'groups'),
-    where('members', 'array-contains', userId),
-    orderBy('createdAt', 'desc')
+    where('members', 'array-contains', userId)
   );
 
   const snapshot = await getDocs(q);
   console.log('Groups snapshot size:', snapshot.size);
-  
-  if (snapshot.empty) {
-    // Try an alternative query without the orderBy
-    const altQuery = query(
-      collection(db, 'groups'),
-      where('members', 'array-contains', userId)
-    );
-    
-    const altSnapshot = await getDocs(altQuery);
-    console.log('Alternative groups snapshot size:', altSnapshot.size);
-    
-    if (!altSnapshot.empty) {
-      return altSnapshot.docs.map(doc => ({ 
-        id: doc.id, 
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt || new Date(),
-        updatedAt: doc.data().updatedAt?.toDate?.() || doc.data().updatedAt || new Date(),
-        memberDetails: doc.data().memberDetails?.map((member: any) => ({
-          ...member,
-          joinedAt: member.joinedAt?.toDate?.() || member.joinedAt || new Date()
-        })) || []
-      } as Group));
-    }
-  }
   
   return snapshot.docs.map(doc => ({ 
     id: doc.id, 
@@ -731,6 +735,168 @@ export const getGroups = async (userId: string): Promise<Group[]> => {
       joinedAt: member.joinedAt?.toDate?.() || member.joinedAt || new Date()
     })) || []
   } as Group));
+};
+
+export const updateGroup = async (groupId: string, updates: Partial<Group>): Promise<void> => {
+  const groupRef = doc(db, 'groups', groupId);
+  await updateDoc(groupRef, {
+    ...updates,
+    updatedAt: serverTimestamp()
+  });
+};
+
+export const addGroupMember = async (groupId: string, userId: string): Promise<void> => {
+  const userProfile = await getUserProfile(userId);
+  if (!userProfile) {
+    throw new Error('User profile not found');
+  }
+  
+  const groupRef = doc(db, 'groups', groupId);
+  await updateDoc(groupRef, {
+    members: arrayUnion(userId),
+    memberDetails: arrayUnion({
+      userId,
+      displayName: userProfile.displayName || 'Member',
+      email: userProfile.email || '',
+      role: 'member',
+      joinedAt: serverTimestamp()
+    }),
+    updatedAt: serverTimestamp()
+  });
+  
+  await addGroupActivity({
+    groupId,
+    userId,
+    userName: userProfile.displayName || 'Member',
+    type: 'member_joined',
+    description: 'Joined the group',
+  });
+};
+
+export const removeGroupMember = async (groupId: string, userId: string): Promise<void> => {
+  const groupRef = doc(db, 'groups', groupId);
+  const groupSnap = await getDoc(groupRef);
+  
+  if (!groupSnap.exists()) return;
+  
+  const group = groupSnap.data() as Group;
+  const memberDetails = group.memberDetails?.find(m => m.userId === userId);
+  
+  await updateDoc(groupRef, {
+    members: arrayRemove(userId),
+    admins: arrayRemove(userId),
+    updatedAt: serverTimestamp()
+  });
+  
+  // Remove from memberDetails array (requires getting current array, modifying it, and setting it back)
+  const updatedMemberDetails = group.memberDetails?.filter(m => m.userId !== userId) || [];
+  await updateDoc(groupRef, { memberDetails: updatedMemberDetails });
+  
+  await addGroupActivity({
+    groupId,
+    userId,
+    userName: memberDetails?.displayName || 'Member',
+    type: 'member_left',
+    description: 'Left the group',
+  });
+};
+
+export const promoteToAdmin = async (groupId: string, userId: string, promotedBy: string): Promise<void> => {
+  const groupRef = doc(db, 'groups', groupId);
+  const groupSnap = await getDoc(groupRef);
+  
+  if (!groupSnap.exists()) return;
+  
+  const group = groupSnap.data() as Group;
+  const memberDetails = group.memberDetails?.find(m => m.userId === userId);
+  const updatedMemberDetails = group.memberDetails?.map(m => 
+    m.userId === userId ? { ...m, role: 'admin' } : m
+  ) || [];
+  
+  await updateDoc(groupRef, {
+    admins: arrayUnion(userId),
+    memberDetails: updatedMemberDetails,
+    updatedAt: serverTimestamp()
+  });
+  
+  await addGroupActivity({
+    groupId,
+    userId: promotedBy,
+    userName: group.memberDetails?.find(m => m.userId === promotedBy)?.displayName || 'Admin',
+    type: 'member_promoted',
+    description: `Promoted ${memberDetails?.displayName || 'Member'} to admin`,
+  });
+};
+
+export const demoteFromAdmin = async (groupId: string, userId: string, demotedBy: string): Promise<void> => {
+  const groupRef = doc(db, 'groups', groupId);
+  const groupSnap = await getDoc(groupRef);
+  
+  if (!groupSnap.exists()) return;
+  
+  const group = groupSnap.data() as Group;
+  const memberDetails = group.memberDetails?.find(m => m.userId === userId);
+  const updatedMemberDetails = group.memberDetails?.map(m => 
+    m.userId === userId ? { ...m, role: 'member' } : m
+  ) || [];
+  
+  await updateDoc(groupRef, {
+    admins: arrayRemove(userId),
+    memberDetails: updatedMemberDetails,
+    updatedAt: serverTimestamp()
+  });
+  
+  await addGroupActivity({
+    groupId,
+    userId: demotedBy,
+    userName: group.memberDetails?.find(m => m.userId === demotedBy)?.displayName || 'Admin',
+    type: 'member_demoted',
+    description: `Demoted ${memberDetails?.displayName || 'Admin'} to member`,
+  });
+};
+
+export const transferGroupOwnership = async (groupId: string, newOwnerId: string, currentOwnerId: string): Promise<void> => {
+  const groupRef = doc(db, 'groups', groupId);
+  const groupSnap = await getDoc(groupRef);
+  
+  if (!groupSnap.exists()) return;
+  
+  const group = groupSnap.data() as Group;
+  const newOwnerDetails = group.memberDetails?.find(m => m.userId === newOwnerId);
+  const currentOwnerDetails = group.memberDetails?.find(m => m.userId === currentOwnerId);
+  
+  const updatedMemberDetails = group.memberDetails?.map(m => {
+    if (m.userId === newOwnerId) return { ...m, role: 'creator' };
+    if (m.userId === currentOwnerId) return { ...m, role: 'admin' };
+    return m;
+  }) || [];
+  
+  await updateDoc(groupRef, {
+    creatorId: newOwnerId,
+    admins: arrayUnion(newOwnerId),
+    memberDetails: updatedMemberDetails,
+    updatedAt: serverTimestamp()
+  });
+  
+  await addGroupActivity({
+    groupId,
+    userId: currentOwnerId,
+    userName: currentOwnerDetails?.displayName || 'Previous Owner',
+    type: 'ownership_transferred',
+    description: `Transferred ownership to ${newOwnerDetails?.displayName || 'New Owner'}`,
+  });
+};
+
+export const leaveGroup = async (groupId: string, userId: string, userName: string): Promise<void> => {
+  await removeGroupMember(groupId, userId);
+  
+  await addGroupActivity({
+    groupId,
+    userId,
+    userName,
+    type: 'member_left',
+    description: 'Left the group',
+  });
 };
 
 export const joinGroupByInviteCode = async (inviteCode: string, userId: string): Promise<void> => {
@@ -774,6 +940,76 @@ export const joinGroupByInviteCode = async (inviteCode: string, userId: string):
   });
 };
 
+export const createGroupInvitation = async (invitation: Omit<GroupInvitation, 'id' | 'createdAt'>): Promise<string> => {
+  const invitationRef = collection(db, 'groupInvitations');
+  const docRef = await addDoc(invitationRef, {
+    ...invitation,
+    status: 'pending',
+    createdAt: serverTimestamp()
+  });
+  return docRef.id;
+};
+
+export const getGroupInvitations = async (userEmail: string): Promise<GroupInvitation[]> => {
+  const q = query(
+    collection(db, 'groupInvitations'),
+    where('invitedEmail', '==', userEmail.toLowerCase()),
+    where('status', '==', 'pending')
+  );
+
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ 
+    id: doc.id, 
+    ...doc.data(),
+    expiresAt: doc.data().expiresAt?.toDate?.() || doc.data().expiresAt,
+    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
+  } as GroupInvitation));
+};
+
+export const acceptGroupInvitation = async (invitationId: string, userId: string, userName: string): Promise<void> => {
+  const invitationRef = doc(db, 'groupInvitations', invitationId);
+  const invitationSnap = await getDoc(invitationRef);
+  
+  if (!invitationSnap.exists()) {
+    throw new Error('Invitation not found');
+  }
+  
+  const invitation = invitationSnap.data() as GroupInvitation;
+  
+  if (invitation.status !== 'pending') {
+    throw new Error('Invitation is no longer pending');
+  }
+  
+  if (invitation.expiresAt && new Date(invitation.expiresAt) < new Date()) {
+    await updateDoc(invitationRef, { status: 'expired' });
+    throw new Error('Invitation has expired');
+  }
+  
+  // Update invitation status
+  await updateDoc(invitationRef, {
+    status: 'accepted'
+  });
+  
+  // Add user to group
+  await addGroupMember(invitation.groupId, userId);
+  
+  // Add activity
+  await addGroupActivity({
+    groupId: invitation.groupId,
+    userId,
+    userName,
+    type: 'member_joined',
+    description: 'Joined via invitation',
+  });
+};
+
+export const declineGroupInvitation = async (invitationId: string): Promise<void> => {
+  const invitationRef = doc(db, 'groupInvitations', invitationId);
+  await updateDoc(invitationRef, {
+    status: 'declined'
+  });
+};
+
 // Group Activity Log
 export const addGroupActivity = async (activity: Omit<GroupActivity, 'id' | 'createdAt'>) => {
   const activityRef = collection(db, 'groupActivities');
@@ -797,6 +1033,44 @@ export const getGroupActivities = async (groupId: string): Promise<GroupActivity
     ...doc.data(),
     createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
   } as GroupActivity));
+};
+
+// Group Savings Goals
+export const getGroupSavingsGoals = async (groupId: string): Promise<SavingsGoal[]> => {
+  const q = query(
+    collection(db, 'savingsGoals'),
+    where('groupId', '==', groupId)
+  );
+
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ 
+    id: doc.id, 
+    ...doc.data(),
+    targetDate: doc.data().targetDate?.toDate?.() || doc.data().targetDate,
+    createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt),
+    updatedAt: doc.data().updatedAt?.toDate?.() || new Date(doc.data().updatedAt),
+    contributions: doc.data().contributions?.map((contrib: any) => ({
+      ...contrib,
+      date: contrib.date?.toDate?.() || contrib.date
+    })) || []
+  } as SavingsGoal));
+};
+
+export const contributeToGoal = async (goalId: string, contribution: {
+  userId: string;
+  userName: string;
+  amount: number;
+}): Promise<void> => {
+  const goalRef = doc(db, 'savingsGoals', goalId);
+  
+  await updateDoc(goalRef, {
+    currentAmount: increment(contribution.amount),
+    contributions: arrayUnion({
+      ...contribution,
+      date: serverTimestamp()
+    }),
+    updatedAt: serverTimestamp()
+  });
 };
 
 // Reminders & Financial Calendar
@@ -1044,6 +1318,48 @@ export const generateAIInsights = async (userId: string) => {
   return insights;
 };
 
+export const getSpendingInsights = async (userId: string): Promise<AIInsight[]> => {
+  const q = query(
+    collection(db, 'aiInsights'),
+    where('userId', '==', userId),
+    orderBy('createdAt', 'desc')
+  );
+
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ 
+    id: doc.id, 
+    ...doc.data(),
+    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
+  } as AIInsight));
+};
+
+export const markInsightAsRead = async (insightId: string) => {
+  const insightRef = doc(db, 'aiInsights', insightId);
+  await updateDoc(insightRef, { read: true });
+};
+
+// Budget Alerts
+export const getBudgetAlerts = async (userId: string) => {
+  const q = query(
+    collection(db, 'budgetAlerts'),
+    where('userId', '==', userId),
+    where('read', '==', false),
+    orderBy('createdAt', 'desc')
+  );
+
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ 
+    id: doc.id, 
+    ...doc.data(),
+    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
+  }));
+};
+
+export const markBudgetAlertAsRead = async (alertId: string) => {
+  const alertRef = doc(db, 'budgetAlerts', alertId);
+  await updateDoc(alertRef, { read: true });
+};
+
 // Currency Conversion
 export const getCurrencyRates = async (): Promise<CurrencyRate[]> => {
   const q = query(collection(db, 'currencyRates'));
@@ -1075,6 +1391,38 @@ export const convertCurrency = async (amount: number, fromCurrency: string, toCu
   }
   
   return amount * rate.rate;
+};
+
+// Expense Templates
+export const saveExpenseTemplate = async (template: any): Promise<string> => {
+  const templateRef = collection(db, 'expenseTemplates');
+  const docRef = await addDoc(templateRef, {
+    ...template,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  });
+  return docRef.id;
+};
+
+export const getExpenseTemplates = async (userId: string): Promise<any[]> => {
+  const q = query(
+    collection(db, 'expenseTemplates'),
+    where('userId', '==', userId),
+    orderBy('createdAt', 'desc')
+  );
+
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ 
+    id: doc.id, 
+    ...doc.data(),
+    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt,
+    updatedAt: doc.data().updatedAt?.toDate?.() || doc.data().updatedAt,
+  }));
+};
+
+export const deleteExpenseTemplate = async (templateId: string): Promise<void> => {
+  const templateRef = doc(db, 'expenseTemplates', templateId);
+  await deleteDoc(templateRef);
 };
 
 // Utility Functions

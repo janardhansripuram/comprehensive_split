@@ -12,11 +12,11 @@ import {
 import { useTheme } from '@/context/ThemeContext';
 import { useAuth } from '@/context/AuthContext';
 import {
-  getFriends,
-  getFriendRequests,
-  sendFriendRequest,
-  acceptFriendRequest,
-  getUserProfile,
+  getFriends, 
+  getFriendRequests, 
+  sendFriendRequest, 
+  acceptFriendRequest, 
+  getUserProfile
 } from '@/services/firestore';
 import {
   UserPlus,
@@ -69,7 +69,7 @@ export default function FriendsList() {
     try {
       console.log('Loading friends for user:', user.uid);
       const friendsData = await getFriends(user.uid);
-      console.log('Friends data:', friendsData);
+      console.log('Friends data loaded:', friendsData.length, 'friends found');
       
       // Get friend details
       const friendsWithDetails = await Promise.all(
@@ -101,10 +101,11 @@ export default function FriendsList() {
   const loadFriendRequests = async () => {
     if (!user?.email) return;
     
-    console.log('Loading friend requests for email:', user.email);
+    const normalizedEmail = user.email.toLowerCase();
+    console.log('Loading friend requests for email:', normalizedEmail);
     try {
-      const requests = await getFriendRequests(user.email);
-      console.log('Friend requests:', requests);
+      const requests = await getFriendRequests(normalizedEmail);
+      console.log('Friend requests loaded:', requests.length, 'requests found');
       setFriendRequests(requests);
     } catch (error) {
       console.error('Error loading friend requests:', error);
@@ -116,6 +117,8 @@ export default function FriendsList() {
 
     const normalizedEmail = emailInput.trim().toLowerCase();
     const userEmail = user.email?.toLowerCase() || '';
+    
+    console.log('Sending friend request from', user.uid, 'to', normalizedEmail);
     
     if (normalizedEmail === userEmail) {
       Alert.alert('Error', 'You cannot add yourself as a friend');
@@ -140,7 +143,7 @@ export default function FriendsList() {
   const handleAcceptRequest = async (request: FriendRequest) => {
     if (!user) return;
 
-    console.log('Accepting friend request:', request.id);
+    console.log('Accepting friend request:', request.id, 'from user:', request.fromUserId);
     setLoading(true);
     try {
       await acceptFriendRequest(request.id, request.fromUserId, user.uid);
@@ -158,7 +161,7 @@ export default function FriendsList() {
   const filteredFriends = friends.filter(friend =>
     friend.displayName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     friend.email?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  ).sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
 
   const styles = StyleSheet.create({
     container: {
