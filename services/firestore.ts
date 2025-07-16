@@ -748,7 +748,9 @@ export const createGroup = async (group: Omit<Group, 'id' | 'createdAt' | 'updat
 
 export const getGroups = async (userId: string): Promise<Group[]> => {
   console.log('Fetching groups for userId:', userId);
-   const q = query(
+   try {
+    if (!userId) return [];
+    const q = query(
       collection(db, GROUPS_COLLECTION),
       where('memberIds', 'array-contains', userId)
     );
