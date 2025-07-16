@@ -46,7 +46,33 @@ import {
   BudgetAlert,
   SpendingInsight
 } from '@/types';
-
+// Collection Names
+const USERS_COLLECTION = 'users';
+const EXPENSES_COLLECTION = 'expenses';
+const FRIEND_REQUESTS_COLLECTION = 'friend_requests';
+const FRIENDS_SUBCOLLECTION = 'friends';
+const GROUPS_COLLECTION = 'groups';
+const ACTIVITY_LOG_SUBCOLLECTION = 'activityLog';
+const INCOME_COLLECTION = 'income';
+const REMINDERS_COLLECTION = 'reminders';
+const BUDGETS_COLLECTION = 'budgets';
+const SPLIT_EXPENSES_COLLECTION = 'split_expenses';
+const SAVINGS_GOALS_COLLECTION = 'savings_goals';
+const GOAL_CONTRIBUTIONS_COLLECTION = 'goal_contributions';
+const GROUP_SAVINGS_GOALS_COLLECTION = 'group_savings_goals';
+const GROUP_GOAL_CONTRIBUTIONS_SUBCOLLECTION = 'contributions';
+const GROUP_INVITATIONS_COLLECTION = 'group_invitations';
+const GLOBAL_CATEGORIES_COLLECTION = 'global_categories';
+const APP_SETTINGS_COLLECTION = 'app_settings';
+const ANNOUNCEMENTS_COLLECTION = 'announcements';
+const INVESTMENTS_COLLECTION = 'investments';
+const SITE_CONTENT_COLLECTION = 'site_content';
+const BLOG_POSTS_COLLECTION = 'blog_posts';
+const NOTIFICATIONS_COLLECTION = 'notifications';
+const MAIL_COLLECTION = 'mail';
+const MESSAGES_COLLECTION = 'messages';
+const CHAT_MESSAGES_SUBCOLLECTION = 'chat_messages';
+const ACHIEVEMENTS_SUBCOLLECTION = 'achievements';
 // User Management
 export const createUserProfile = async (userId: string, userData: Partial<User>): Promise<void> => {
   const userRef = doc(db, 'users', userId);
@@ -722,24 +748,30 @@ export const createGroup = async (group: Omit<Group, 'id' | 'createdAt' | 'updat
 
 export const getGroups = async (userId: string): Promise<Group[]> => {
   console.log('Fetching groups for userId:', userId);
-  const q = query(
-    collection(db, 'groups'),
-    where('members', 'array-contains', userId)
-  );
-
-  const snapshot = await getDocs(q);
-  console.log('Groups snapshot size:', snapshot.size);
-  
-  return snapshot.docs.map(doc => ({ 
-    id: doc.id, 
-    ...doc.data(),
-    createdAt: doc.data().createdAt?.toDate?.() || doc.data().createdAt || new Date(),
-    updatedAt: doc.data().updatedAt?.toDate?.() || doc.data().updatedAt || new Date(),
-    memberDetails: doc.data().memberDetails?.map((member: any) => ({
-      ...member,
-      joinedAt: member.joinedAt?.toDate?.() || member.joinedAt || new Date()
-    })) || []
-  } as Group));
+   const q = query(
+      collection(db, GROUPS_COLLECTION),
+      where('memberIds', 'array-contains', userId)
+    );
+    const querySnapshot = await getDocs(q);
+    const groups = querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        return {
+            id: docSnap.id,
+            name: data.name,
+            createdBy: data.createdBy,
+            memberIds: data.memberIds || [],
+            memberDetails: data.memberDetails || [],
+            imageUrl: data.imageUrl || undefined,
+            createdAt: (data.createdAt as Timestamp).toDate().toISOString(),
+            updatedAt: data.updatedAt ? (data.updatedAt as Timestamp).toDate().toISOString() : undefined,
+        } as Group
+    });
+    groups.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return groups;
+  } catch (error) {
+    console.error("[firestore.getGroupsForUser] Error getting groups for user: ", error);
+    throw error;
+  }
 };
 
 export const updateGroup = async (groupId: string, updates: Partial<Group>): Promise<void> => {
